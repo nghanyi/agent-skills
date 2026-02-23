@@ -13,7 +13,7 @@ Helps agents integrate with the whole Jupiter Suite of APIs.
 #### Installation
 
 ```bash
-npx add-skill jup-ag/agents-skills --skill "integrating-jupiter"
+npx skills add jup-ag/agents-skills --skill "integrating-jupiter"
 ```
 
 
@@ -23,7 +23,7 @@ npx add-skill jup-ag/agents-skills --skill "integrating-jupiter"
 ### Installation
 
 ```bash
-npx add-skill jup-ag/agents-skills
+npx skills add jup-ag/agents-skills
 ```
 
 ## License
