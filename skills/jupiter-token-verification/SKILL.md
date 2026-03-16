@@ -64,6 +64,7 @@ When a user triggers this skill, guide them through parameter collection step by
 Ask the user what they want to do:
 
 > What would you like to do?
+>
 > 1. **Check** if a token is already verified
 > 2. **Submit** a token for verification
 
@@ -76,6 +77,7 @@ Ask:
 > What is the **Solana token mint address** you'd like to verify?
 
 **Validate before proceeding:**
+
 - Must be a valid base58 string
 - Typically 32–44 characters
 - If invalid, say: _"That doesn't look like a valid Solana mint address. It should be a base58 string like `So11111111111111111111111111111111111111112`. Please try again."_
@@ -109,24 +111,21 @@ Collect these in order. For each, show what it is and why it matters:
 **a) Token's Twitter/X URL** (optional but recommended)
 
 > What is the **token project's Twitter/X URL**?
-> Example: `https://x.com/jupiterexchange`
-> _(Type "skip" to leave blank)_
+> Example: `https://x.com/jupiterexchange` > _(Type "skip" to leave blank)_
 
 Validate: must be a full URL starting with `https://x.com/` or `https://twitter.com/` followed by a valid username (1–15 chars, alphanumeric + underscore). If the user provides a bare handle like `@handle`, auto-convert it to `https://x.com/handle` and confirm with the user.
 
 **b) Requester's Twitter/X URL** (optional)
 
 > What is **your** Twitter/X URL? This identifies who submitted the request.
-> Example: `https://x.com/your_handle`
-> _(Type "skip" to leave blank)_
+> Example: `https://x.com/your_handle` > _(Type "skip" to leave blank)_
 
 Same validation as above.
 
 **c) Description** (optional but recommended)
 
 > Please provide a **short description** of the token.
-> Example: _"Community governance token for XYZ protocol"_
-> _(Type "skip" to leave blank)_
+> Example: _"Community governance token for XYZ protocol"_ > _(Type "skip" to leave blank)_
 
 **d) Wallet Address** (required for premium, optional for basic)
 
@@ -146,14 +145,14 @@ Present a summary of all collected parameters and ask for confirmation:
 
 > Here's a summary of your verification request:
 >
-> | Field | Value |
-> |-------|-------|
-> | **Token Mint** | `{tokenId}` |
-> | **Tier** | {basic/premium} |
-> | **Token Twitter** | {url or _not provided_} |
-> | **Your Twitter** | {url or _not provided_} |
-> | **Description** | {text or _not provided_} |
-> | **Wallet** | {address or _not provided_} |
+> | Field             | Value                       |
+> | ----------------- | --------------------------- |
+> | **Token Mint**    | `{tokenId}`                 |
+> | **Tier**          | {basic/premium}             |
+> | **Token Twitter** | {url or _not provided_}     |
+> | **Your Twitter**  | {url or _not provided_}     |
+> | **Description**   | {text or _not provided_}    |
+> | **Wallet**        | {address or _not provided_} |
 >
 > Does this look correct? (yes/no)
 
@@ -269,8 +268,8 @@ Content-Type: application/json
 GET http://localhost:8789/payments/transfer/craft-txn?senderAddress={walletAddress}
 ```
 
-| Param           | Type   | Required | Notes                      |
-| --------------- | ------ | -------- | -------------------------- |
+| Param           | Type   | Required | Notes                        |
+| --------------- | ------ | -------- | ---------------------------- |
 | `senderAddress` | string | **Yes**  | Wallet that will pay 0.1 JUP |
 
 **Response:**
@@ -351,9 +350,9 @@ On success, the server automatically creates a **premium** verification request 
 
 ### Verification Tiers
 
-| Tier      | Cost     | Description                                                           |
-| --------- | -------- | --------------------------------------------------------------------- |
-| `basic`   | Free     | Standard verification — submit via `POST /verifications`              |
+| Tier      | Cost    | Description                                                           |
+| --------- | ------- | --------------------------------------------------------------------- |
+| `basic`   | Free    | Standard verification — submit via `POST /verifications`              |
 | `premium` | 0.1 JUP | Paid verification — requires payment via `craft-txn` + `execute` flow |
 
 ### Verification Statuses
@@ -385,13 +384,13 @@ Usernames must match `^[a-zA-Z0-9_]{1,15}$` (1–15 characters, alphanumeric + u
 
 When collecting user input, handle these common mistakes gracefully instead of rejecting outright:
 
-| User provides                          | Auto-correct to                 | Confirm with user?                                                               |
-| -------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------- |
-| `@jupiterexchange`                     | `https://x.com/jupiterexchange` | Yes — _"I'll format that as `https://x.com/jupiterexchange` — is that correct?"_ |
-| `jupiterexchange` (bare handle)        | `https://x.com/jupiterexchange` | Yes                                                                              |
-| `twitter.com/handle` (no https)        | `https://twitter.com/handle`    | Yes                                                                              |
-| `x.com/handle` (no https)              | `https://x.com/handle`          | Yes                                                                              |
-| Token mint with leading/trailing spaces | Trimmed string                 | No                                                                               |
+| User provides                           | Auto-correct to                 | Confirm with user?                                                               |
+| --------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------- |
+| `@jupiterexchange`                      | `https://x.com/jupiterexchange` | Yes — _"I'll format that as `https://x.com/jupiterexchange` — is that correct?"_ |
+| `jupiterexchange` (bare handle)         | `https://x.com/jupiterexchange` | Yes                                                                              |
+| `twitter.com/handle` (no https)         | `https://twitter.com/handle`    | Yes                                                                              |
+| `x.com/handle` (no https)               | `https://x.com/handle`          | Yes                                                                              |
+| Token mint with leading/trailing spaces | Trimmed string                  | No                                                                               |
 
 ---
 
@@ -512,4 +511,4 @@ main().catch(console.error);
 
 - **JUP Token Mint**: `JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN`
 - **Jupiter Docs**: [dev.jup.ag](https://dev.jup.ag)
-- **Jupiter Verification**: [verified.jup.ag](https://verified.jup.ag)
+- **Jupiter Verified**: [verified.jup.ag](https://verified.jup.ag)
