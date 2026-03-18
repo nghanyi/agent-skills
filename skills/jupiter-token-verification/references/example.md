@@ -1,27 +1,19 @@
 # Complete Working Example
 
-> Copy-paste-ready TypeScript showing the full express verification flow. Install: `npm install @solana/web3.js @solana/spl-token`
+> Copy-paste-ready TypeScript showing the full express verification flow.
 >
-> In agent-generated scripts, token details are read from a `config.json` file (never interpolated into source code). This example uses hardcoded constants for readability — replace with your actual values.
+> This example wraps the payment script from [Payment Execution](payment-execution.md) with status checking and keypair loading. The payment script template in `payment-execution.md` is the **single source of truth** for transaction crafting, verification, signing, and execution — refer to it for implementation details.
 
 ```typescript
 // SECURITY: Private key is used ONLY for local signing.
 // Only the signed transaction is sent to the Jupiter API.
 // The private key NEVER leaves this machine.
 
-import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import fs from "fs";
 import path from "path";
 
 const BASE_URL = "https://token-verification-dev-api.jup.ag";
-const JUP_MINT = new PublicKey("JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN");
-const COMPUTE_BUDGET_PROGRAM_ID = new PublicKey(
-  "ComputeBudget111111111111111111111111111111"
-);
 const KEYPAIR_PATH = "/path/to/your/keypair.json";
 
 // Example values — replace with your actual token details
@@ -55,110 +47,38 @@ async function main() {
     return;
   }
 
-  // ── Step 3: Craft payment transaction ──
-  // (Step 2 — POST /verifications — is not needed for express; execute auto-creates it)
-  const craftRes = await fetch(
-    `${BASE_URL}/payments/transfer/craft-txn?senderAddress=${senderAddress}`
-  );
+  // ── Step 2: Run the payment script ──
+  // For the full payment flow (craft → verify → sign → execute),
+  // see the template script in payment-execution.md (steps 7b–7e).
+  //
+  // In short:
+  //   1. Write a config.json with { tokenId, twitterHandle, senderTwitterHandle, description }
+  //   2. Write the pay.ts script from payment-execution.md
+  //   3. Run: KEYPAIR_PATH="/path/to/keypair.json" npx tsx pay.ts
+  //
+  // The script handles: crafting the unsigned transaction, verifying its
+  // contents (SPL Token program, amount ≤ 1 JUP, correct destination ATA),
+  // signing locally, and calling the execute endpoint.
 
-  if (!craftRes.ok) {
-    throw new Error(`Failed to craft transaction: ${craftRes.statusText}`);
-  }
-
-  const craftData = await craftRes.json();
-  const { transaction: unsignedTxBase64, requestId } = craftData;
-
-  console.log(`Payment: ${craftData.amount} base units of JUP`);
-  console.log(`Request ID: ${requestId}`);
-
-  // ── Verify transaction contents before signing ──
-  // SECURITY: Never blindly sign a server-provided transaction
-  const txBuffer = Buffer.from(unsignedTxBase64, "base64");
-  const transaction = Transaction.from(txBuffer);
-
-  const mainIxs = transaction.instructions.filter(
-    (ix) => !ix.programId.equals(COMPUTE_BUDGET_PROGRAM_ID)
-  );
-
-  if (mainIxs.length !== 1) {
-    throw new Error(
-      `Expected 1 main instruction, found ${mainIxs.length}`
-    );
-  }
-
-  const ix = mainIxs[0];
-
-  if (!ix.programId.equals(TOKEN_PROGRAM_ID)) {
-    throw new Error(
-      `Unexpected program ${ix.programId.toBase58()}, expected SPL Token`
-    );
-  }
-
-  const opcode = ix.data[0];
-  let transferAmount: bigint;
-  if ((opcode === 3 || opcode === 12) && ix.data.length >= 9) {
-    transferAmount = ix.data.readBigUInt64LE(1);
-  } else {
-    throw new Error(`Not a Transfer instruction (opcode=${opcode})`);
-  }
-
-  const expectedAmount = BigInt(craftData.amount);
-  const MAX_AMOUNT = BigInt(1_000_000);
-  if (transferAmount !== expectedAmount) {
-    throw new Error(
-      `Amount mismatch — transaction has ${transferAmount}, API said ${expectedAmount}`
-    );
-  }
-  if (transferAmount > MAX_AMOUNT) {
-    throw new Error(`Amount ${transferAmount} exceeds maximum ${MAX_AMOUNT}`);
-  }
-
-  const receiverWallet = new PublicKey(craftData.receiverAddress);
-  const expectedReceiverATA = getAssociatedTokenAddressSync(
-    JUP_MINT,
-    receiverWallet
-  );
-  const destinationAccount = ix.keys[1].pubkey;
-  if (!destinationAccount.equals(expectedReceiverATA)) {
-    throw new Error(
-      `Destination ${destinationAccount.toBase58()} does not match expected receiver ATA ${expectedReceiverATA.toBase58()}`
-    );
-  }
-
-  console.log("Transaction verified: single SPL token transfer of 1 JUP ✓");
-
-  // ── Sign the transaction locally ──
-  // SECURITY: Only the signed transaction is sent to the server, NOT the private key
-  transaction.partialSign(wallet);
-
-  const signedTxBase64 = Buffer.from(
-    transaction.serialize({ requireAllSignatures: false })
-  ).toString("base64");
-
-  // ── Step 4: Execute payment (server co-signs and broadcasts) ──
-  const executeRes = await fetch(`${BASE_URL}/payments/transfer/execute`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      transaction: signedTxBase64,
-      requestId,
-      senderAddress,
-      tokenId: TOKEN_ID,
-      twitterHandle: TWITTER_HANDLE,
-      senderTwitterHandle: SENDER_TWITTER,
-      description: DESCRIPTION,
-    }),
-  });
-
-  const executeData = await executeRes.json();
-
-  if (executeData.status === "Success") {
-    console.log(`Express verification submitted!`);
-    console.log(`Transaction signature: ${executeData.signature}`);
-  } else {
-    console.error("Execution failed:", executeData.error);
-  }
+  console.log("Token is not yet verified. Ready to submit express verification.");
+  console.log(`Wallet: ${senderAddress}`);
+  console.log(`Token:  ${TOKEN_ID}`);
+  console.log("Run the payment script from payment-execution.md to proceed.");
 }
 
 main().catch(console.error);
 ```
+
+## What the payment script does
+
+For reference, the payment script in [Payment Execution](payment-execution.md) performs these steps:
+
+1. **Craft** — calls `GET /payments/transfer/craft-txn` to get an unsigned transaction
+2. **Verify** — decodes the transaction and checks:
+   - Exactly one SPL Token transfer instruction (plus optional compute budget)
+   - Amount matches the API response and does not exceed 1 JUP (1,000,000 base units)
+   - Destination matches the expected receiver ATA
+3. **Sign** — signs locally with `VersionedTransaction.sign([keypair])`
+4. **Execute** — calls `POST /payments/transfer/execute` with the signed transaction
+
+See [Payment Execution](payment-execution.md) for the complete implementation.
