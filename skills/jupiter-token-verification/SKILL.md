@@ -21,7 +21,7 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 
 - **Base URL**: `https://token-verification-dev-api.jup.ag`
 - **Auth**: None required
-- **Payment currency**: JUP (0.1 JUP per premium verification)
+- **Payment currency**: JUP (1 JUP per premium verification)
 - **Agent behavior**: Guide users step by step — collect parameters one at a time, validate each input, and confirm before submitting. See [Agent Conversation Flow](#agent-conversation-flow).
 
 ## Use / Do Not Use
@@ -97,10 +97,10 @@ If the user only wanted to **check** status, stop here.
 
 Ask:
 
-> Would you like **basic** (free) or **premium** (0.1 JUP) verification?
+> Would you like **basic** (free) or **premium** (1 JUP) verification?
 >
 > - **Basic** — free, standard review process
-> - **Premium** — costs 0.1 JUP, paid from your wallet
+> - **Premium** — costs 1 JUP, paid from your wallet
 
 Default to `basic` if the user is unsure.
 
@@ -131,7 +131,7 @@ Same validation as above.
 
 If **premium** was selected:
 
-> What is your **Solana wallet address**? This wallet will pay 0.1 JUP and must sign the transaction.
+> What is your **Solana wallet address**? This wallet will pay 1 JUP and must sign the transaction.
 
 If **basic** was selected:
 
@@ -270,7 +270,7 @@ GET https://token-verification-dev-api.jup.ag/payments/transfer/craft-txn?sender
 
 | Param           | Type   | Required | Notes                        |
 | --------------- | ------ | -------- | ---------------------------- |
-| `senderAddress` | string | **Yes**  | Wallet that will pay 0.1 JUP |
+| `senderAddress` | string | **Yes**  | Wallet that will pay 1 JUP |
 
 **Response:**
 
@@ -353,7 +353,7 @@ On success, the server automatically creates a **premium** verification request 
 | Tier      | Cost    | Description                                                           |
 | --------- | ------- | --------------------------------------------------------------------- |
 | `basic`   | Free    | Standard verification — submit via `POST /verifications`              |
-| `premium` | 0.1 JUP | Paid verification — requires payment via `craft-txn` + `execute` flow |
+| `premium` | 1 JUP | Paid verification — requires payment via `craft-txn` + `execute` flow |
 
 ### Verification Statuses
 
@@ -399,7 +399,7 @@ When collecting user input, handle these common mistakes gracefully instead of r
 1. **Twitter handles must be full URLs** — `https://x.com/handle` or `https://twitter.com/handle`. Bare handles like `@handle` are rejected by the API.
 2. **`craft-txn` returns an unsigned transaction** — the user MUST sign it with their wallet before calling `execute`. Do not submit unsigned transactions.
 3. **The execute endpoint co-signs server-side** — do NOT broadcast the transaction to the Solana RPC yourself. The server adds its own signature and submits it.
-4. **Payment is 0.1 JUP tokens** (100,000 base units with 6 decimals) — confirm the user has enough JUP balance before starting the payment flow.
+4. **Payment is 1 JUP token** (1,000,000 base units with 6 decimals) — confirm the user has enough JUP balance before starting the payment flow.
 5. **Check existing verification before submitting** — call `GET /verifications/token/:tokenId` first. Submitting a duplicate returns `409 Conflict`.
 6. **Already-verified tokens cannot be resubmitted** — if the token is already verified on the data API, `POST /verifications` returns `400 Bad Request`.
 7. **Token must exist** — the token must be indexed by Jupiter's data API. Unknown tokens return `400 Bad Request`.
