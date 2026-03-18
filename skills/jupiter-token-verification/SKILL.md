@@ -19,7 +19,7 @@ tags:
 
 Submit and pay for token verification on Jupiter via a simple REST API.
 
-- **Base URL**: `http://localhost:8789`
+- **Base URL**: `https://token-verification-dev-api.jup.ag`
 - **Auth**: None required
 - **Payment currency**: JUP (0.1 JUP per premium verification)
 - **Agent behavior**: Guide users step by step — collect parameters one at a time, validate each input, and confirm before submitting. See [Agent Conversation Flow](#agent-conversation-flow).
@@ -176,7 +176,7 @@ Always check first to avoid duplicate submissions.
 **`GET /verifications/token/:tokenId`**
 
 ```
-GET http://localhost:8789/verifications/token/{tokenId}
+GET https://token-verification-dev-api.jup.ag/verifications/token/{tokenId}
 ```
 
 **Response:**
@@ -214,7 +214,7 @@ If `data` is `null`, no verification exists yet. If `status` is `"verified"`, th
 **`POST /verifications`**
 
 ```
-POST http://localhost:8789/verifications
+POST https://token-verification-dev-api.jup.ag/verifications
 Content-Type: application/json
 ```
 
@@ -265,7 +265,7 @@ Content-Type: application/json
 **`GET /payments/transfer/craft-txn`**
 
 ```
-GET http://localhost:8789/payments/transfer/craft-txn?senderAddress={walletAddress}
+GET https://token-verification-dev-api.jup.ag/payments/transfer/craft-txn?senderAddress={walletAddress}
 ```
 
 | Param           | Type   | Required | Notes                        |
@@ -304,7 +304,7 @@ The user signs the transaction from Step 3 client-side, then submits it to the e
 **`POST /payments/transfer/execute`**
 
 ```
-POST http://localhost:8789/payments/transfer/execute
+POST https://token-verification-dev-api.jup.ag/payments/transfer/execute
 Content-Type: application/json
 ```
 
@@ -418,7 +418,7 @@ import { Keypair, Transaction } from "@solana/web3.js";
 import fs from "fs";
 import path from "path";
 
-const BASE_URL = "http://localhost:8789";
+const BASE_URL = "https://token-verification-dev-api.jup.ag";
 const KEYPAIR_PATH = "/path/to/your/keypair.json";
 
 // Token details
