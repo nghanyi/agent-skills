@@ -8,11 +8,11 @@ Skills for AI coding agents to integrate with Jupiter Token Verification.
 
 | Category | Description |
 |----------|-------------|
-| Check Status | Query existing verification status for a token |
-| Basic Verification | Submit a free verification request via `POST /verifications` |
-| Premium Verification | Paid verification (1000 JUP) via `craft-txn` + `execute` payment flow |
+| Check Eligibility | Check if a token is eligible for verification |
+| Basic Verification | Submit a free verification request via `POST /basic/submit` |
+| Express Verification | Paid verification (1 JUP) via `craft-txn` + `execute` payment flow |
 | Data Types | Verification tiers, statuses, reject categories, and Twitter handle format |
-| Working Example | Copy-paste-ready TypeScript for the full premium express flow |
+| Working Example | Copy-paste-ready TypeScript for the full express flow |
 
 ## License
 

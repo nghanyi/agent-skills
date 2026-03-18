@@ -20,7 +20,7 @@ tags:
 Submit and pay for token verification on Jupiter via a simple REST API.
 
 - **Base URL**: `https://token-verification-dev-api.jup.ag`
-- **Auth**: None required
+- **Auth**: API key required for submission endpoints (`x-api-key` header). Eligibility checks are unauthenticated.
 - **Payment currency**: JUP (1 JUP per express verification)
 - **Naming**: "Express" and "premium" refer to the same paid tier. The user-facing name is **express**, but the API uses `"premium"` as the `verificationTier` value.
 - **Agent behavior**: Guide users step by step — collect parameters one at a time, validate each input, and confirm before submitting. See [Agent Conversation Flow](#agent-conversation-flow).
@@ -45,12 +45,13 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 
 ## Intent Router
 
-| User intent                          | Endpoint                                         | Method |
-| ------------------------------------ | ------------------------------------------------ | ------ |
-| Check if a token is already verified | `/verifications/token/:tokenId`                  | `GET`  |
-| Submit token for verification        | `/verifications`                                 | `POST` |
-| Craft payment transaction (express)  | `/payments/transfer/craft-txn?senderAddress=...` | `GET`  |
-| Sign and execute payment (express)   | `/payments/transfer/execute`                     | `POST` |
+| User intent                           | Endpoint                                        | Method | Auth    |
+| ------------------------------------- | ----------------------------------------------- | ------ | ------- |
+| Check express eligibility             | `/combined/express/check-eligibility?tokenId=…`  | `GET`  | None    |
+| Check basic eligibility               | `/combined/basic/check-eligibility?tokenId=…`    | `GET`  | None    |
+| Submit basic verification             | `/basic/submit`                                  | `POST` | API key |
+| Craft express payment transaction     | `/payments/express/craft-txn?senderAddress=…`    | `GET`  | API key |
+| Sign and execute express payment      | `/payments/express/execute`                      | `POST` | API key |
 
 ## References
 
@@ -73,7 +74,7 @@ Ask the user what they want to do:
 
 > What would you like to do?
 >
-> 1. **Check** if a token is already verified
+> 1. **Check** if a token is eligible for verification
 > 2. **Submit** a token for verification
 
 If the user's message already makes their intent clear, skip this question.
@@ -90,18 +91,7 @@ Ask:
 - Typically 32–44 characters
 - If invalid, say: _"That doesn't look like a valid Solana mint address. It should be a base58 string like `So11111111111111111111111111111111111111112`. Please try again."_
 
-### 3. Check Existing Status (automatic)
-
-After receiving the token mint, **always** call `GET /verifications/token/:tokenId` automatically and report the result:
-
-- If `status` is `"verified"` → Tell the user the token is already verified. Done.
-- If `status` is `"pending"` → Tell the user a verification is already pending. Done.
-- If `status` is `"rejected"` → Tell the user it was rejected, show `rejectCategory` and `rejectReason`, and ask if they want to resubmit.
-- If `data` is `null` → Tell the user no verification exists yet, and proceed to collect submission details.
-
-If the user only wanted to **check** status, stop here.
-
-### 4. Choose Verification Tier
+### 3. Choose Verification Tier
 
 **Auto-select when possible:** If the user's original message already indicates which tier they want, skip this question and use their choice directly:
 
@@ -117,7 +107,35 @@ If the user only wanted to **check** status, stop here.
 
 Default to `basic` if the user is unsure.
 
-### 5. Collect Remaining Parameters (one at a time)
+### 4. Check Eligibility (automatic)
+
+After collecting the token mint and tier, call the tier-specific eligibility endpoint automatically:
+
+- Express: `GET /combined/express/check-eligibility?tokenId={tokenId}`
+- Basic: `GET /combined/basic/check-eligibility?tokenId={tokenId}`
+
+Response fields: `canVerify` (boolean), `canMetadata` (boolean), `verificationError?` (string), `metadataError?` (string).
+
+Logic:
+- `canVerify: true` → proceed to next step
+- `canVerify: false` → report `verificationError` to user and stop
+
+For **"check-only" intent** (user just wants to know status), call both eligibility endpoints and synthesize the result:
+- Report whether the token is eligible for basic and/or express verification
+- If not eligible, show the `verificationError` for each tier
+- Done — do not proceed to submission.
+
+### 5. Resolve API Key
+
+Before any authenticated call (`POST /basic/submit`, `GET /payments/express/craft-txn`, `POST /payments/express/execute`), resolve the API key:
+
+1. Check `.env` / `.env.local` for `JUPITER_API_KEY` or `JUP_API_KEY`
+2. If not found, tell the user they need an API key and direct them to request one at `/new` (e.g., `https://token-verification-dev-api.jup.ag/new`)
+3. Once the user has their key, ask them to store it in `.env` as `JUPITER_API_KEY=<key>`
+
+The key is passed via the `x-api-key` header. Rate limit: 2 requests/day per key.
+
+### 6. Collect Remaining Parameters (one at a time)
 
 Collect these in order. For each, show what it is and why it matters:
 
@@ -140,17 +158,17 @@ Same validation as above.
 > Please provide a **short description** of the token.
 > Example: _"Community governance token for XYZ protocol"_ > _(Type "skip" to leave blank)_
 
-**d) Wallet Address** (basic tier only — optional)
+**d) Wallet Address** (basic tier — required)
 
 If **basic** was selected:
 
-> What is your **Solana wallet address**? _(optional — type "skip" to leave blank)_
+> What is your **Solana wallet address**?
 
 Validate: same base58 format as token mint.
 
 If **express** was selected: **skip this step**. The wallet address will be derived automatically from the user's private key during the payment execution flow.
 
-### 6. Confirm Before Submitting
+### 7. Confirm Before Submitting
 
 Present a summary of all collected parameters and ask for confirmation:
 
@@ -169,9 +187,9 @@ Present a summary of all collected parameters and ask for confirmation:
 
 If the user says no, ask which field to change.
 
-### 7. Submit and Report
+### 8. Submit and Report
 
-- For **basic**: call `POST /verifications` with all collected parameters and report the result. Done. (See [API Reference](references/api-reference.md) for request/response details.)
+- For **basic**: call `POST /basic/submit` with `submitVerification: true` and all collected parameters. Report the result — response includes `verificationCreated` and `metadataCreated` booleans. Done. (See [API Reference](references/api-reference.md) for request/response details.)
 - For **express**: load [Payment Execution](references/payment-execution.md) and follow steps 7a–7e. The agent will resolve the user's private key, write a payment script, execute it locally, and report the result.
 
 ---
@@ -196,17 +214,20 @@ When collecting user input, handle these common mistakes gracefully instead of r
 2. **`craft-txn` returns an unsigned transaction** — the user MUST sign it with their wallet before calling `execute`. Do not submit unsigned transactions.
 3. **The execute endpoint co-signs server-side** — do NOT broadcast the transaction to the Solana RPC yourself. The server adds its own signature and submits it.
 4. **Payment is 1 JUP token** (1,000,000 base units with 6 decimals) — confirm the user has enough JUP balance before starting the payment flow.
-5. **Check existing verification before submitting** — call `GET /verifications/token/:tokenId` first. Submitting a duplicate returns `409 Conflict`.
-6. **Already-verified tokens cannot be resubmitted** — if the token is already verified on the data API, `POST /verifications` returns `400 Bad Request`.
-7. **Token must exist** — the token must be indexed by Jupiter's data API. Unknown tokens return `400 Bad Request`.
+5. **Check eligibility before submitting** — call `GET /combined/express/check-eligibility?tokenId=…` or `GET /combined/basic/check-eligibility?tokenId=…` first. Submitting a duplicate returns an error.
+6. **Already-verified tokens cannot be resubmitted** — if the token is already verified, the eligibility endpoint returns `canVerify: false` with `verificationError`.
+7. **Token must exist** — the token must be indexed by Jupiter's data API. Unknown tokens return an error.
 8. **Admin endpoints are off-limits** — `POST /verifications/verify`, `POST /verifications/unverify`, and `POST /verifications/mass-unverify` all require admin authentication. Do not attempt to call them.
-9. **Basic verification = done at Step 2** — only express verification requires the payment flow (Steps 3–4).
-10. **Express upgrades via execute** — when you pay via the `execute` endpoint, the server automatically creates (or upgrades) the verification to express tier. You do not need to call `POST /verifications` separately for express.
+9. **Basic verification = done at Step 8** — only express verification requires the payment flow (steps 7a–7e).
+10. **Express upgrades via execute** — when you pay via the `execute` endpoint, the server automatically creates (or upgrades) the verification to express tier. Response includes `verificationCreated` and `metadataCreated` booleans. You do not need to call `POST /basic/submit` separately for express.
 11. **Private keys MUST stay local** — The payment script signs transactions client-side. The private key is NEVER sent to any API, server, or external service. Only the signed transaction is transmitted. Agents must communicate this clearly to users and include security comments in generated scripts. Recommend `.env` files (with `.gitignore`) and dedicated payment wallets. **Never accept a raw private key directly in chat** — only support `.env` files and keypair file paths.
 12. **Use `VersionedTransaction`, not legacy `Transaction`** — The API returns a versioned transaction. Deserialize with `VersionedTransaction.deserialize(buffer)`, sign with `transaction.sign([keypair])`, and serialize with `Buffer.from(transaction.serialize()).toString('base64')`. Do not use legacy `Transaction.from()` or `partialSign()`.
 13. **Script execution requires Node.js v18+** — The payment script uses `fetch` (built-in from Node 18) and `@solana/web3.js`. If Node.js is too old, fall back to providing the script for manual execution or suggest the user upgrade Node.js.
 14. **Always verify transaction contents before signing** — Never blindly sign a server-provided transaction. Decode the instructions, verify the program is SPL Token, verify the amount matches expectations and does not exceed 1 JUP (1,000,000 base units), and verify the destination matches the expected receiver ATA. Reject if any unexpected instructions are present (compute budget instructions are allowed).
 15. **Never interpolate user input into source code** — User-provided values (description, Twitter handles, etc.) must be written to a separate `config.json` file and read at runtime. Embedding user input directly in TypeScript string literals enables code injection attacks.
+16. **API key required for submission endpoints** — `POST /basic/submit`, `GET /payments/express/craft-txn`, and `POST /payments/express/execute` all require an `x-api-key` header. Eligibility check endpoints are unauthenticated.
+17. **Rate limit: 2 requests/day per API key** — The submission endpoints are rate-limited to 2 requests per day per API key. Warn users before submitting.
+18. **Metadata is optional in combined endpoints** — The combined endpoints support optional `tokenMetadata` for setting token metadata alongside verification. If not provided, only verification is processed.
 
 ---
 

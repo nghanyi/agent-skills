@@ -2,51 +2,91 @@
 
 > **Base URL**: `https://token-verification-dev-api.jup.ag`
 
-## Check Existing Status
+## Authentication
 
-**`GET /verifications/token/:tokenId`**
+Some endpoints require an API key passed via the `x-api-key` header:
+
+| Endpoint | Auth Required |
+| -------- | ------------- |
+| `GET /combined/express/check-eligibility` | None |
+| `GET /combined/basic/check-eligibility` | None |
+| `POST /basic/submit` | API key |
+| `GET /payments/express/craft-txn` | API key |
+| `POST /payments/express/execute` | API key |
+
+**Rate limit:** 2 requests/day per API key for submission endpoints.
 
 ```
-GET https://token-verification-dev-api.jup.ag/verifications/token/{tokenId}
+x-api-key: your-api-key-here
 ```
+
+---
+
+## Check Express Eligibility
+
+**`GET /combined/express/check-eligibility`**
+
+```
+GET https://token-verification-dev-api.jup.ag/combined/express/check-eligibility?tokenId={tokenId}
+```
+
+| Param     | Type   | Required | Notes                    |
+| --------- | ------ | -------- | ------------------------ |
+| `tokenId` | string | **Yes**  | Solana token mint address |
 
 **Response:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "id": 123,
-    "tokenId": "So11111111111111111111111111111111111111112",
-    "walletAddress": "8xDr...",
-    "twitterHandle": "jupiterexchange",
-    "senderTwitterHandle": "sender_handle",
-    "verifiedAt": "2025-01-15T10:30:00Z",
-    "verificationTier": "premium",
-    "status": "verified",
-    "smartFollowers": 1500,
-    "evaluationCount": 2,
-    "lastEvaluationAt": "2025-01-15T10:30:00Z",
-    "createdAt": "2025-01-10T08:00:00Z",
-    "updatedAt": "2025-01-15T10:30:00Z",
-    "description": "Official wrapped SOL token",
-    "rejectCategory": null,
-    "rejectReason": null
-  }
+  "canVerify": true,
+  "canMetadata": true,
+  "verificationError": null,
+  "metadataError": null
 }
 ```
 
-If `data` is `null`, no verification exists yet. If `status` is `"verified"`, the token is already verified — do not resubmit.
+- `canVerify: true` → token is eligible for express verification
+- `canVerify: false` → check `verificationError` for the reason
+- `canMetadata: true` → token metadata can be submitted alongside verification
+- `canMetadata: false` → check `metadataError` for the reason
 
 ---
 
-## Submit Verification Request
+## Check Basic Eligibility
 
-**`POST /verifications`**
+**`GET /combined/basic/check-eligibility`**
 
 ```
-POST https://token-verification-dev-api.jup.ag/verifications
+GET https://token-verification-dev-api.jup.ag/combined/basic/check-eligibility?tokenId={tokenId}
+```
+
+| Param     | Type   | Required | Notes                    |
+| --------- | ------ | -------- | ------------------------ |
+| `tokenId` | string | **Yes**  | Solana token mint address |
+
+**Response:**
+
+```json
+{
+  "canVerify": true,
+  "canMetadata": false,
+  "verificationError": null,
+  "metadataError": "Token metadata already exists"
+}
+```
+
+Same response schema as express eligibility.
+
+---
+
+## Submit Basic Verification
+
+**`POST /basic/submit`**
+
+```
+POST https://token-verification-dev-api.jup.ag/basic/submit
 Content-Type: application/json
+x-api-key: your-api-key-here
 ```
 
 **Request body:**
@@ -55,21 +95,26 @@ Content-Type: application/json
 {
   "tokenId": "So11111111111111111111111111111111111111112",
   "walletAddress": "8xDr...",
+  "submitVerification": true,
   "twitterHandle": "https://x.com/jupiterexchange",
   "senderTwitterHandle": "https://x.com/sender_handle",
-  "verificationTier": "basic",
-  "description": "Official wrapped SOL token"
+  "description": "Official wrapped SOL token",
+  "tokenMetadata": {
+    "name": "Wrapped SOL",
+    "symbol": "SOL"
+  }
 }
 ```
 
-| Field                 | Type   | Required | Notes                                                              |
-| --------------------- | ------ | -------- | ------------------------------------------------------------------ |
-| `tokenId`             | string | **Yes**  | Solana token mint address                                          |
-| `walletAddress`       | string | No       | Requester's wallet address (valid Solana address)                  |
-| `twitterHandle`       | string | No       | Token's Twitter — must be a valid `x.com` or `twitter.com` URL     |
-| `senderTwitterHandle` | string | No       | Requester's Twitter — must be a valid `x.com` or `twitter.com` URL |
-| `verificationTier`    | string | No       | `"basic"` (default) or `"premium"` (express)                       |
-| `description`         | string | No       | Description of the token                                           |
+| Field                 | Type    | Required | Notes                                                              |
+| --------------------- | ------- | -------- | ------------------------------------------------------------------ |
+| `tokenId`             | string  | **Yes**  | Solana token mint address                                          |
+| `walletAddress`       | string  | **Yes**  | Requester's wallet address (valid Solana address)                  |
+| `submitVerification`  | boolean | No       | Set to `true` to submit verification request                       |
+| `twitterHandle`       | string  | No       | Token's Twitter — must be a valid `x.com` or `twitter.com` URL     |
+| `senderTwitterHandle` | string  | No       | Requester's Twitter — must be a valid `x.com` or `twitter.com` URL |
+| `description`         | string  | No       | Description of the token                                           |
+| `tokenMetadata`       | object  | No       | Optional token metadata to set alongside verification              |
 
 **Response:**
 
@@ -77,26 +122,23 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "id": 456,
-    "tokenId": "So11111111111111111111111111111111111111112",
-    "status": "pending",
-    "verificationTier": "basic",
-    "createdAt": "2025-06-01T12:00:00Z",
-    "updatedAt": "2025-06-01T12:00:00Z"
+    "verificationCreated": true,
+    "metadataCreated": false
   }
 }
 ```
 
-> For **basic** verification, you're done here. Steps 3–4 are only needed for **express** verification (paid with JUP).
+> For **basic** verification, you're done here. The express payment flow is only needed for **express** verification (paid with JUP).
 
 ---
 
 ## Craft Payment Transaction (Express Only)
 
-**`GET /payments/transfer/craft-txn`**
+**`GET /payments/express/craft-txn`**
 
 ```
-GET https://token-verification-dev-api.jup.ag/payments/transfer/craft-txn?senderAddress={walletAddress}
+GET https://token-verification-dev-api.jup.ag/payments/express/craft-txn?senderAddress={walletAddress}
+x-api-key: your-api-key-here
 ```
 
 | Param           | Type   | Required | Notes                        |
@@ -132,11 +174,12 @@ The `transaction` field is a **base64-encoded unsigned transaction**. The user m
 
 The user signs the transaction from the craft step client-side, then submits it to the execute endpoint. The server co-signs with its verification wallet before broadcasting.
 
-**`POST /payments/transfer/execute`**
+**`POST /payments/express/execute`**
 
 ```
-POST https://token-verification-dev-api.jup.ag/payments/transfer/execute
+POST https://token-verification-dev-api.jup.ag/payments/express/execute
 Content-Type: application/json
+x-api-key: your-api-key-here
 ```
 
 **Request body:**
@@ -149,7 +192,11 @@ Content-Type: application/json
   "tokenId": "So11111111111111111111111111111111111111112",
   "twitterHandle": "https://x.com/jupiterexchange",
   "senderTwitterHandle": "https://x.com/sender_handle",
-  "description": "Official wrapped SOL token"
+  "description": "Official wrapped SOL token",
+  "tokenMetadata": {
+    "name": "Jupiter Exchange",
+    "symbol": "JUP"
+  }
 }
 ```
 
@@ -162,6 +209,7 @@ Content-Type: application/json
 | `twitterHandle`       | string | **Yes**  | Token's Twitter URL                        |
 | `senderTwitterHandle` | string | No       | Requester's Twitter URL                    |
 | `description`         | string | **Yes**  | Description of the token                   |
+| `tokenMetadata`       | object | No       | Optional token metadata to set alongside verification |
 
 **Response:**
 
@@ -169,11 +217,13 @@ Content-Type: application/json
 {
   "status": "Success",
   "signature": "5tG8...",
+  "verificationCreated": true,
+  "metadataCreated": false,
   "totalTime": 2500
 }
 ```
 
-On success, the server automatically creates a **express** verification request for the token.
+On success, the server automatically creates a **express** verification request for the token. The `verificationCreated` and `metadataCreated` fields indicate what was created.
 
 ---
 
@@ -183,7 +233,7 @@ On success, the server automatically creates a **express** verification request 
 
 | Tier      | Cost    | Description                                                           |
 | --------- | ------- | --------------------------------------------------------------------- |
-| `basic`   | Free    | Standard verification — submit via `POST /verifications`              |
+| `basic`   | Free    | Standard verification — submit via `POST /basic/submit`               |
 | `express` | 1 JUP | Paid verification — requires payment via `craft-txn` + `execute` flow. API value: `"premium"` |
 
 ### Verification Statuses

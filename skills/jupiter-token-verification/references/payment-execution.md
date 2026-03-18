@@ -38,11 +38,11 @@ Write a `pay.ts` script and a separate `config.json` file in the temp directory.
 
 1. Read the private key from an environment variable (`PRIVATE_KEY`) or keypair file path (`KEYPAIR_PATH`) passed at runtime
 2. Derive the wallet address from the private key using `Keypair.fromSecretKey`
-3. Call `GET /payments/transfer/craft-txn?senderAddress={derived-wallet}` to get the unsigned transaction
+3. Call `GET /payments/express/craft-txn?senderAddress={derived-wallet}` with `x-api-key` header to get the unsigned transaction
 4. Deserialize as a `VersionedTransaction` (matching the production UI implementation)
 5. Verify the transaction contents before signing: decode the compiled instructions, confirm there is exactly one SPL Token transfer instruction (plus optional compute budget instructions), confirm the amount does not exceed 1 JUP, confirm the destination matches the expected receiver ATA, and reject if any unexpected instructions are present
 6. Sign locally with `transaction.sign([keypair])` and serialize
-7. Call `POST /payments/transfer/execute` with the signed transaction and all verification parameters
+7. Call `POST /payments/express/execute` with `x-api-key` header, the signed transaction, and all verification parameters
 8. Print `SUCCESS:<signature>` on success or `ERROR:<code>:<message>` on failure
 
 The script MUST include these security comments:
@@ -91,6 +91,15 @@ if (!PRIVATE_KEY && !KEYPAIR_PATH) {
   process.exit(1);
 }
 
+// Read API key from environment variable — required for authenticated endpoints
+const API_KEY = process.env.JUPITER_API_KEY;
+if (!API_KEY) {
+  console.error(
+    "ERROR:NO_API_KEY:Set JUPITER_API_KEY environment variable"
+  );
+  process.exit(1);
+}
+
 async function main() {
   // Derive wallet from private key — no need to ask for wallet address separately
   let keypair: Keypair;
@@ -105,7 +114,10 @@ async function main() {
 
   // Step 1: Craft the unsigned payment transaction
   const craftRes = await fetch(
-    `${BASE_URL}/payments/transfer/craft-txn?senderAddress=${senderAddress}`
+    `${BASE_URL}/payments/express/craft-txn?senderAddress=${senderAddress}`,
+    {
+      headers: { "x-api-key": API_KEY },
+    }
   );
 
   if (!craftRes.ok) {
@@ -214,9 +226,9 @@ async function main() {
   const signedTxBase64 = Buffer.from(transaction.serialize()).toString("base64");
 
   // Step 5: Execute — server co-signs and broadcasts
-  const executeRes = await fetch(`${BASE_URL}/payments/transfer/execute`, {
+  const executeRes = await fetch(`${BASE_URL}/payments/express/execute`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
     body: JSON.stringify({
       transaction: signedTxBase64,
       requestId,
@@ -232,6 +244,8 @@ async function main() {
 
   if (executeData.status === "Success") {
     console.log(`SUCCESS:${executeData.signature}`);
+    console.log(`Verification created: ${executeData.verificationCreated}`);
+    console.log(`Metadata created: ${executeData.metadataCreated}`);
   } else {
     console.error(`ERROR:EXECUTE_FAILED:${JSON.stringify(executeData)}`);
     process.exit(1);
@@ -259,20 +273,20 @@ Use `JSON.stringify()` to write this file, ensuring all user-provided values are
 
 ## 7d. Execute the Script
 
-Run the script, passing the private key via environment variable or keypair file path:
+Run the script, passing the private key and API key via environment variables or keypair file path:
 
 ```bash
 # Using .env private key:
-cd "$TMPDIR" && PRIVATE_KEY="<base58-key>" npx tsx pay.ts
+cd "$TMPDIR" && PRIVATE_KEY="<base58-key>" JUPITER_API_KEY="<key>" npx tsx pay.ts
 
 # Using keypair file:
-cd "$TMPDIR" && KEYPAIR_PATH="/path/to/keypair.json" npx tsx pay.ts
+cd "$TMPDIR" && KEYPAIR_PATH="/path/to/keypair.json" JUPITER_API_KEY="<key>" npx tsx pay.ts
 ```
 
 Fallback if `tsx` is not available:
 
 ```bash
-cd "$TMPDIR" && PRIVATE_KEY="<base58-key>" npx ts-node pay.ts
+cd "$TMPDIR" && PRIVATE_KEY="<base58-key>" JUPITER_API_KEY="<key>" npx ts-node pay.ts
 ```
 
 Parse the output:
@@ -297,8 +311,10 @@ Parse the output:
 | Error Pattern       | Likely Cause                                         | Suggestion                                              |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
 | `NO_KEY`            | Private key not provided                             | Set `PRIVATE_KEY` env var, add to `.env`, or set `KEYPAIR_PATH` to a keypair JSON file |
+| `NO_API_KEY`        | API key not provided                                 | Set `JUPITER_API_KEY` env var or add to `.env`           |
 | `CRAFT_FAILED:400`  | Invalid wallet or insufficient JUP balance           | Check wallet has ≥1 JUP + small SOL for fees             |
-| `CRAFT_FAILED:429`  | Rate limited                                         | Wait a moment and retry                                  |
+| `CRAFT_FAILED:401`  | Invalid or missing API key                           | Check `JUPITER_API_KEY` is set correctly                  |
+| `CRAFT_FAILED:429`  | Rate limited (2 requests/day per key)                | Wait until the next day or use a different API key        |
 | `TX_VERIFY_FAILED`  | Transaction contents don't match expectations        | Possible API change or malicious response — do not sign   |
 | `EXECUTE_FAILED`    | Transaction expired, network error, or co-sign issue | Re-run the script (crafts a fresh transaction)           |
 | `EXCEPTION`         | Script crash (network, dependency issue)             | Check Node.js v18+, check network connectivity           |
