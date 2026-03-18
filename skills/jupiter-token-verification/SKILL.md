@@ -21,15 +21,16 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 
 - **Base URL**: `https://token-verification-dev-api.jup.ag`
 - **Auth**: None required
-- **Payment currency**: JUP (1 JUP per premium verification)
+- **Payment currency**: JUP (1 JUP per express verification)
+- **Naming**: "Express" and "premium" refer to the same paid tier. The user-facing name is **express**, but the API uses `"premium"` as the `verificationTier` value.
 - **Agent behavior**: Guide users step by step — collect parameters one at a time, validate each input, and confirm before submitting. See [Agent Conversation Flow](#agent-conversation-flow).
 
 ## Use / Do Not Use
 
 **Use when:**
 
-- Submitting a token for verification (basic or premium)
-- Paying for premium verification with JUP tokens
+- Submitting a token for verification (basic or express)
+- Paying for express verification with JUP tokens
 - Checking the verification status of a token
 
 **Do not use when:**
@@ -40,7 +41,7 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 
 ## Triggers
 
-`verify token`, `token verification`, `submit verification`, `verification status`, `check verification`, `verification payment`, `pay for verification`, `express verification`, `basic verification`, `premium verification`
+`verify token`, `token verification`, `submit verification`, `verification status`, `check verification`, `verification payment`, `pay for verification`, `express verification`, `basic verification`, `express verification`
 
 ## Intent Router
 
@@ -48,8 +49,8 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 | ------------------------------------ | ------------------------------------------------ | ------ |
 | Check if a token is already verified | `/verifications/token/:tokenId`                  | `GET`  |
 | Submit token for verification        | `/verifications`                                 | `POST` |
-| Craft payment transaction (premium)  | `/payments/transfer/craft-txn?senderAddress=...` | `GET`  |
-| Sign and execute payment (premium)   | `/payments/transfer/execute`                     | `POST` |
+| Craft payment transaction (express)  | `/payments/transfer/craft-txn?senderAddress=...` | `GET`  |
+| Sign and execute payment (express)   | `/payments/transfer/execute`                     | `POST` |
 
 ---
 
@@ -97,15 +98,15 @@ If the user only wanted to **check** status, stop here.
 
 **Auto-select when possible:** If the user's original message already indicates which tier they want, skip this question and use their choice directly:
 
-- Phrases like `express verification`, `premium verification`, `paid verification`, `express flow` → auto-select **premium**
+- Phrases like `express verification`, `paid verification`, `express flow` → auto-select **express**
 - Phrases like `basic verification`, `free verification` → auto-select **basic**
 
 **Only ask if unclear:**
 
-> Would you like **basic** (free) or **premium** (1 JUP) verification?
+> Would you like **basic** (free) or **express** (1 JUP) verification?
 >
 > - **Basic** — free, standard review process
-> - **Premium** — costs 1 JUP, paid from your wallet
+> - **Express** — costs 1 JUP, paid from your wallet
 
 Default to `basic` if the user is unsure.
 
@@ -140,7 +141,7 @@ If **basic** was selected:
 
 Validate: same base58 format as token mint.
 
-If **premium** was selected: **skip this step**. The wallet address will be derived automatically from the user's private key during the [Premium Payment Execution](#premium-payment-execution) flow.
+If **express** was selected: **skip this step**. The wallet address will be derived automatically from the user's private key during the [Express Payment Execution](#express-payment-execution) flow.
 
 ### 6. Confirm Before Submitting
 
@@ -151,7 +152,7 @@ Present a summary of all collected parameters and ask for confirmation:
 > | Field             | Value                       |
 > | ----------------- | --------------------------- |
 > | **Token Mint**    | `{tokenId}`                 |
-> | **Tier**          | {basic/premium}             |
+> | **Tier**          | {basic/express}             |
 > | **Token Twitter** | {url or _not provided_}     |
 > | **Your Twitter**  | {url or _not provided_}     |
 > | **Description**   | {text or _not provided_}    |
@@ -164,13 +165,13 @@ If the user says no, ask which field to change.
 ### 7. Submit and Report
 
 - For **basic**: call `POST /verifications` with all collected parameters and report the result. Done.
-- For **premium**: proceed to the [Premium Payment Execution](#premium-payment-execution) section below. The agent will resolve the user's private key, write a payment script, execute it locally, and report the result.
+- For **express**: proceed to the [Express Payment Execution](#express-payment-execution) section below. The agent will resolve the user's private key, write a payment script, execute it locally, and report the result.
 
 ---
 
-# Premium Payment Execution
+# Express Payment Execution
 
-When the user has confirmed a **premium** verification request, the agent executes the payment end-to-end. The wallet address is derived from the private key — it is not collected separately.
+When the user has confirmed a **express** verification request, the agent executes the payment end-to-end. The wallet address is derived from the private key — it is not collected separately.
 
 ## 7a. Resolve Private Key
 
@@ -329,14 +330,14 @@ Parse the output:
 
 **On success:**
 
-> Premium verification payment submitted!
+> Express verification payment submitted!
 >
 > | Detail          | Value                                                              |
 > | --------------- | ------------------------------------------------------------------ |
 > | **Signature**   | `{signature}`                                                      |
 > | **Explorer**    | `https://solana.fm/tx/{signature}`                                 |
 > | **Token**       | `{tokenId}`                                                        |
-> | **Status**      | Premium verification pending review                                |
+> | **Status**      | Express verification pending review                                |
 
 **On failure**, map error patterns to likely causes:
 
@@ -358,7 +359,7 @@ rm -rf "$TMPDIR"
 
 # Express Verification Flow
 
-> **Note:** The express flow and the premium flow are the same thing. The [Premium Payment Execution](#premium-payment-execution) section above describes how the agent executes this flow end-to-end. This section serves as the API reference for each endpoint involved.
+> **Note:** The [Express Payment Execution](#express-payment-execution) section above describes how the agent executes this flow end-to-end. This section serves as the API reference for each endpoint involved.
 
 The express flow has 4 steps: check status, submit request, craft payment transaction, sign and execute.
 
@@ -430,7 +431,7 @@ Content-Type: application/json
 | `walletAddress`       | string | No       | Requester's wallet address (valid Solana address)                  |
 | `twitterHandle`       | string | No       | Token's Twitter — must be a valid `x.com` or `twitter.com` URL     |
 | `senderTwitterHandle` | string | No       | Requester's Twitter — must be a valid `x.com` or `twitter.com` URL |
-| `verificationTier`    | string | No       | `"basic"` (default) or `"premium"`                                 |
+| `verificationTier`    | string | No       | `"basic"` (default) or `"premium"` (express)                       |
 | `description`         | string | No       | Description of the token                                           |
 
 **Response:**
@@ -449,11 +450,11 @@ Content-Type: application/json
 }
 ```
 
-> For **basic** verification, you're done here. Steps 3–4 are only needed for **premium** verification (paid with JUP).
+> For **basic** verification, you're done here. Steps 3–4 are only needed for **express** verification (paid with JUP).
 
 ---
 
-## Step 3 — Craft Payment Transaction (Premium Only)
+## Step 3 — Craft Payment Transaction (Express Only)
 
 **`GET /payments/transfer/craft-txn`**
 
@@ -490,7 +491,7 @@ The `transaction` field is a **base64-encoded unsigned transaction**. The user m
 
 ---
 
-## Step 4 — Sign and Execute Payment (Premium Only)
+## Step 4 — Sign and Execute Payment (Express Only)
 
 The user signs the transaction from Step 3 client-side, then submits it to the execute endpoint. The server co-signs with its verification wallet before broadcasting.
 
@@ -535,7 +536,7 @@ Content-Type: application/json
 }
 ```
 
-On success, the server automatically creates a **premium** verification request for the token.
+On success, the server automatically creates a **express** verification request for the token.
 
 ---
 
@@ -546,7 +547,7 @@ On success, the server automatically creates a **premium** verification request 
 | Tier      | Cost    | Description                                                           |
 | --------- | ------- | --------------------------------------------------------------------- |
 | `basic`   | Free    | Standard verification — submit via `POST /verifications`              |
-| `premium` | 1 JUP | Paid verification — requires payment via `craft-txn` + `execute` flow |
+| `express` | 1 JUP | Paid verification — requires payment via `craft-txn` + `execute` flow. API value: `"premium"` |
 
 ### Verification Statuses
 
@@ -597,8 +598,8 @@ When collecting user input, handle these common mistakes gracefully instead of r
 6. **Already-verified tokens cannot be resubmitted** — if the token is already verified on the data API, `POST /verifications` returns `400 Bad Request`.
 7. **Token must exist** — the token must be indexed by Jupiter's data API. Unknown tokens return `400 Bad Request`.
 8. **Admin endpoints are off-limits** — `POST /verifications/verify`, `POST /verifications/unverify`, and `POST /verifications/mass-unverify` all require admin authentication. Do not attempt to call them.
-9. **Basic verification = done at Step 2** — only premium verification requires the payment flow (Steps 3–4).
-10. **Premium upgrades via execute** — when you pay via the `execute` endpoint, the server automatically creates (or upgrades) the verification to premium tier. You do not need to call `POST /verifications` separately for premium.
+9. **Basic verification = done at Step 2** — only express verification requires the payment flow (Steps 3–4).
+10. **Express upgrades via execute** — when you pay via the `execute` endpoint, the server automatically creates (or upgrades) the verification to express tier. You do not need to call `POST /verifications` separately for express.
 11. **Private keys MUST stay local** — The payment script signs transactions client-side. The private key is NEVER sent to any API, server, or external service. Only the signed transaction is transmitted. Agents must communicate this clearly to users and include security comments in generated scripts. Recommend `.env` files (with `.gitignore`) and dedicated payment wallets.
 12. **Serialize with `requireAllSignatures: false`** — The crafted transaction requires both the user's signature and the server's co-signature. Since the server signs after receiving the transaction, you must serialize with `transaction.serialize({ requireAllSignatures: false })`. Without this, `@solana/web3.js` throws `"Missing signature for public key"`.
 13. **Script execution requires Node.js v18+** — The payment script uses `fetch` (built-in from Node 18) and `@solana/web3.js`. If Node.js is too old, fall back to providing the script for manual execution or suggest the user upgrade Node.js.
@@ -607,7 +608,7 @@ When collecting user input, handle these common mistakes gracefully instead of r
 
 # Complete Working Example
 
-> Copy-paste-ready TypeScript showing the full premium express flow. Install: `npm install @solana/web3.js`
+> Copy-paste-ready TypeScript showing the full express verification flow. Install: `npm install @solana/web3.js`
 
 ```typescript
 // SECURITY: Private key is used ONLY for local signing.
@@ -653,7 +654,7 @@ async function main() {
   }
 
   // ── Step 3: Craft payment transaction ──
-  // (Step 2 — POST /verifications — is not needed for premium; execute auto-creates it)
+  // (Step 2 — POST /verifications — is not needed for express; execute auto-creates it)
   const craftRes = await fetch(
     `${BASE_URL}/payments/transfer/craft-txn?senderAddress=${senderAddress}`
   );
@@ -696,7 +697,7 @@ async function main() {
   const executeData = await executeRes.json();
 
   if (executeData.status === "Success") {
-    console.log(`Premium verification submitted!`);
+    console.log(`Express verification submitted!`);
     console.log(`Transaction signature: ${executeData.signature}`);
   } else {
     console.error("Execution failed:", executeData.error);
