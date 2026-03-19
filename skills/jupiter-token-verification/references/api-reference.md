@@ -312,6 +312,8 @@ On success, the server automatically creates a **express** verification request 
 
 Optional object for setting token metadata alongside verification. Can be included in both `POST /basic/submit` and `POST /payments/express/execute`.
 
+> **Important:** Only include fields the user explicitly wants to update. Omit any field not being updated — do not send empty strings or null values. Sending an empty value for a field like `tokenDescription`, `twitter`, or `website` may clear the existing value on the server.
+
 | Field                   | Type     | Required | Description                           |
 | ----------------------- | -------- | -------- | ------------------------------------- |
 | `tokenId`               | string   | **Yes**  | The token mint address                |
