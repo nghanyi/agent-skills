@@ -82,13 +82,11 @@ Ask the user what they want to do:
 
 If the user's message already makes their intent clear, skip this question.
 
-For **"update metadata" intent**: proceed to Step 3 (collect mint) → Step 4 (check eligibility). Step 2 (tier selection) is skipped — the basic eligibility endpoint will be used to check metadata availability.
+For **"update metadata" intent**: proceed to Step 2 (tier selection) → Step 3 (collect mint) → Step 4 (check eligibility). The eligibility endpoint must match the tier selected in Step 2.
 
 ### 2. Choose Verification Tier
 
 Before collecting the mint address, determine which tier the user wants. This ensures only one eligibility endpoint is called later.
-
-**For "submit" or "check" intents:**
 
 **Auto-select from user intent:** If the user's original message already indicates which tier they want, use their choice directly:
 
@@ -103,8 +101,6 @@ Before collecting the mint address, determine which tier the user wants. This en
 > - **Express** — costs 1 JUP, paid from your wallet
 
 Default to `express` if the user is unsure, approvals are faster.
-
-**For "update metadata" intent:** Skip this step — tier selection is not needed.
 
 ### 3. Collect Token Mint Address (always required)
 
@@ -122,7 +118,7 @@ Ask:
 
 After collecting the mint, check eligibility for **only** the tier selected in Step 2 — do NOT call both endpoints:
 
-- **Basic** (or metadata-only intent): `GET /combined/basic/check-eligibility?tokenId={tokenId}`
+- **Basic**: `GET /combined/basic/check-eligibility?tokenId={tokenId}`
 - **Express**: `GET /combined/express/check-eligibility?tokenId={tokenId}`
 
 Use the result to determine which flow to follow:
