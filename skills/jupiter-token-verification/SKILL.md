@@ -238,14 +238,41 @@ This endpoint is unauthenticated. It returns:
     "instagram": "...",
     "tiktok": "..."
   },
-  "search": [...],
+  "search": [
+    {
+      "id": "...",
+      "name": "Current Name",
+      "symbol": "CUR",
+      "icon": "https://...",
+      "website": "https://...",
+      "twitter": "...",
+      "telegram": "..."
+    }
+  ],
   "description": {
     "description": "Current token description text"
   }
 }
 ```
 
-Use the `rpc` object as the base for the `tokenMetadata` payload. Map `rpc.assetId` → `tokenId`. Use `description.description` as the value for `tokenDescription`.
+Use `search[0]` as the primary source for token info, `description.description` for `tokenDescription`, and `rpc` only for fields not available in `search` or when overriding on-chain metadata.
+
+**Field mapping:**
+
+| Source | Field |
+| --- | --- |
+| `search[0].id` | `tokenId` |
+| `search[0].name` | `name` |
+| `search[0].symbol` | `symbol` |
+| `search[0].icon` | `icon` |
+| `search[0].website` | `website` |
+| `search[0].twitter` | `twitter` |
+| `search[0].telegram` | `telegram` |
+| `description.description` | `tokenDescription` |
+| `rpc.twitterCommunity` | `twitterCommunity` (not in search) |
+| `rpc.discord` | `discord` (not in search) |
+| `rpc.instagram` | `instagram` (not in search) |
+| `rpc.tiktok` | `tiktok` (not in search) |
 
 #### 6a-ii. Collect user updates
 

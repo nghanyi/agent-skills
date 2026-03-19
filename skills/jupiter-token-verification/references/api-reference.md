@@ -115,7 +115,17 @@ No authentication required.
     "instagram": null,
     "tiktok": null
   },
-  "search": [...],
+  "search": [
+    {
+      "id": "So11111111111111111111111111111111111111112",
+      "name": "Token Name",
+      "symbol": "TKN",
+      "icon": "https://example.com/icon.png",
+      "website": "https://example.com",
+      "twitter": "https://x.com/token",
+      "telegram": null
+    }
+  ],
   "description": {
     "description": "Token description text"
   }
@@ -123,18 +133,21 @@ No authentication required.
 ```
 
 **Field mapping to `tokenMetadata`:**
-- `rpc.assetId` → `tokenId`
-- `rpc.icon` → `icon`
-- `rpc.name` → `name`
-- `rpc.symbol` → `symbol`
-- `rpc.website` → `website`
-- `rpc.telegram` → `telegram`
-- `rpc.twitter` → `twitter`
-- `rpc.twitterCommunity` → `twitterCommunity`
-- `rpc.discord` → `discord`
-- `rpc.instagram` → `instagram`
-- `rpc.tiktok` → `tiktok`
+
+Use `search[0]` as the primary source for token info, `description.description` for `tokenDescription`, and `rpc` only for fields not available in `search` or when overriding on-chain metadata.
+
+- `search[0].id` → `tokenId`
+- `search[0].name` → `name`
+- `search[0].symbol` → `symbol`
+- `search[0].icon` → `icon`
+- `search[0].website` → `website`
+- `search[0].twitter` → `twitter`
+- `search[0].telegram` → `telegram`
 - `description.description` → `tokenDescription`
+- `rpc.twitterCommunity` → `twitterCommunity` (not in search)
+- `rpc.discord` → `discord` (not in search)
+- `rpc.instagram` → `instagram` (not in search)
+- `rpc.tiktok` → `tiktok` (not in search)
 
 ---
 
