@@ -1,10 +1,12 @@
 # Express Payment Execution
 
-When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was already collected in Step 6d of the main flow.
+When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was either auto-derived from the private key in Step 5b or collected in Step 6 of the main flow.
 
 ## 7a. Resolve Private Key
 
-The agent resolves the user's private key using this priority order:
+**If the private key was already found in Step 5b** of the main flow, reuse that key source — do not re-resolve.
+
+Otherwise, resolve the user's private key using this priority order:
 
 1. **Check `.env` files** — Look for a `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY` variable in `.env`, `.env.local`, or similar files in the current project directory. If found, use it directly.
 2. **Check for keypair file** — Look for a Solana keypair JSON file (e.g., `~/.config/solana/id.json` or a path provided by the user). Load the keypair using `Keypair.fromSecretKey(new Uint8Array(JSON.parse(fs.readFileSync(path, 'utf8'))))`.
