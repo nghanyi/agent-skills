@@ -190,6 +190,22 @@ x-api-key: your-api-key-here
 
 > For **basic** verification, you're done here. The express payment flow is only needed for **express** verification (paid with JUP).
 
+> **Note:** At least one of `submitVerification: true` or `tokenMetadata` must be provided. For a **metadata-only** update (when `canVerify: false` but `canMetadata: true`), set `submitVerification: false` and include only `tokenMetadata`:
+>
+> ```json
+> {
+>   "tokenId": "So11111111111111111111111111111111111111112",
+>   "walletAddress": "8xDr...",
+>   "submitVerification": false,
+>   "tokenMetadata": {
+>     "tokenId": "So11111111111111111111111111111111111111112",
+>     "name": "Wrapped SOL",
+>     "symbol": "SOL",
+>     "website": "https://solana.com"
+>   }
+> }
+> ```
+
 ---
 
 ## Craft Payment Transaction (Express Only)

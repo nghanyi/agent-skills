@@ -80,6 +80,7 @@ const TOKEN_ID: string = config.tokenId;
 const TWITTER_HANDLE: string = config.twitterHandle;
 const SENDER_TWITTER: string = config.senderTwitterHandle;
 const DESCRIPTION: string = config.description;
+const TOKEN_METADATA: Record<string, unknown> | null = config.tokenMetadata ?? null;
 
 // Read private key from environment variable or keypair file — NEVER hardcoded in source
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
@@ -237,6 +238,7 @@ async function main() {
       twitterHandle: TWITTER_HANDLE,
       senderTwitterHandle: SENDER_TWITTER,
       description: DESCRIPTION,
+      ...(TOKEN_METADATA ? { tokenMetadata: TOKEN_METADATA } : {}),
     }),
   });
 
@@ -265,7 +267,8 @@ Write a `config.json` file in the same temp directory with the collected paramet
   "tokenId": "<collected token mint>",
   "twitterHandle": "<collected twitter URL or empty string>",
   "senderTwitterHandle": "<collected sender twitter URL or empty string>",
-  "description": "<collected description or empty string>"
+  "description": "<collected description or empty string>",
+  "tokenMetadata": null
 }
 ```
 

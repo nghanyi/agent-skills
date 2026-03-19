@@ -1,6 +1,6 @@
 ---
 name: jupiter-token-verification
-description: Guide agents through the Jupiter Token Verification express flow — submit verification requests, pay with JUP tokens, and check verification status.
+description: Guide agents through the Jupiter Token Verification express flow — submit verification requests, pay with JUP tokens, update token metadata, and check verification status.
 license: MIT
 metadata:
   author: jupiter
@@ -9,6 +9,8 @@ tags:
   - jupiter-token-verification
   - jup-ag
   - token-verification
+  - token-metadata
+  - update-metadata
   - vrfd
   - verified
   - solana
@@ -32,16 +34,16 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 - Submitting a token for verification (basic or express)
 - Paying for express verification with JUP tokens
 - Checking the verification status of a token
+- Updating token metadata (name, symbol, social links, etc.) alongside verification
 
 **Do not use when:**
 
 - Performing admin operations (verify, reject, unverify) — these require admin auth
 - Swapping, lending, or trading — use `integrating-jupiter` skill instead
-- Updating token metadata — that is a separate token metadata flow
 
 ## Triggers
 
-`verify token`, `token verification`, `submit verification`, `verification status`, `check verification`, `verification payment`, `pay for verification`, `express verification`, `basic verification`, `express verification`
+`verify token`, `token verification`, `submit verification`, `verification status`, `check verification`, `verification payment`, `pay for verification`, `express verification`, `basic verification`, `update token metadata`, `token metadata`, `update token info`
 
 ## Intent Router
 
@@ -116,13 +118,19 @@ After collecting the token mint and tier, call the tier-specific eligibility end
 
 Response fields: `canVerify` (boolean), `canMetadata` (boolean), `verificationError?` (string), `metadataError?` (string).
 
-Logic:
-- `canVerify: true` → proceed to next step
-- `canVerify: false` → report `verificationError` to user and stop
+Logic — use both `canVerify` and `canMetadata` to determine what to offer:
+
+| `canVerify` | `canMetadata` | Action |
+|---|---|---|
+| `true` | `true` | Proceed with verification. After collecting verification params in Step 6, ask if they also want to update metadata (Step 6a). |
+| `true` | `false` | Proceed with verification only. Inform user: _"Metadata updates are not available for this token ({metadataError})."_ Skip Step 6a. |
+| `false` | `true` | Verification not available — report `verificationError`. Offer to proceed with a **metadata-only** update: _"Verification isn't available ({verificationError}), but you can still update token metadata. Would you like to proceed with a metadata update?"_ If yes, skip to Step 5 → Step 6a (metadata collection only) → Step 7 → Step 8 with `submitVerification: false`. |
+| `false` | `false` | Report both `verificationError` and `metadataError` to user. Stop. |
 
 For **"check-only" intent** (user just wants to know status), call both eligibility endpoints and synthesize the result:
 - Report whether the token is eligible for basic and/or express verification
-- If not eligible, show the `verificationError` for each tier
+- Report whether metadata updates are available
+- If not eligible, show the `verificationError` and/or `metadataError` for each tier
 - Done — do not proceed to submission.
 
 ### 5. Resolve API Key
@@ -173,6 +181,34 @@ Validate: same base58 format as token mint.
 
 If **express** was selected: **skip this step**. The wallet address will be derived automatically from the user's private key during the payment execution flow.
 
+### 6a. Collect Metadata Fields (when `canMetadata: true`)
+
+Only runs when the eligibility check returned `canMetadata: true`.
+
+Ask:
+
+> Would you also like to **update token metadata**? Here are the fields you can change:
+>
+> **Identity:** name, symbol, icon, tokenDescription
+> **Links:** website, twitter, twitterCommunity, telegram, discord, instagram, tiktok, otherUrl
+> **Supply & Market Data:** circulatingSupply, circulatingSupplyUrl, coingeckoCoinId
+>
+> Would you like to update any of these? (yes/no)
+
+- If user says **no** → skip, proceed to Step 7 with verification only
+- If user says **yes** → ask which fields they want to update, then collect values one at a time
+
+**Field collection rules:**
+
+- `tokenId` is auto-filled from the token mint collected in Step 2 — do not ask for it
+- When the user provides a value for `circulatingSupply`, auto-set `useCirculatingSupply: true`
+- When the user provides a value for `coingeckoCoinId`, auto-set `useCoingeckoCoinId: true`
+- When the user provides a value for `circulatingSupplyUrl`, auto-set `useCirculatingSupplyUrl: true`
+- URL fields (website, twitter, discord, etc.) should be validated as proper URLs
+- See [API Reference — tokenMetadata Object](references/api-reference.md#tokenmetadata-object) for the full schema
+
+For **metadata-only** flow (when `canVerify: false, canMetadata: true`): this step is the primary collection step — verification params from Step 6 are skipped.
+
 ### 7. Confirm Before Submitting
 
 Present a summary of all collected parameters and ask for confirmation:
@@ -187,15 +223,25 @@ Present a summary of all collected parameters and ask for confirmation:
 > | **Your Twitter**  | {url or _not provided_}     |
 > | **Description**   | {text or _not provided_}    |
 > | **Wallet**        | {address or _not provided_} |
->
+
+If metadata fields were collected in Step 6a, add them to the summary:
+
+> | **Metadata**      |                             |
+> | **— Name**        | {value or _not provided_}   |
+> | **— Symbol**      | {value or _not provided_}   |
+> | _(etc. for each collected field)_ |              |
+
+For **metadata-only** flow, adjust the heading: _"Here's a summary of your metadata update request:"_ and omit verification-only fields (tier, token twitter, your twitter, description).
+
 > Does this look correct? (yes/no)
 
 If the user says no, ask which field to change.
 
 ### 8. Submit and Report
 
-- For **basic**: call `POST /basic/submit` with `submitVerification: true` and all collected parameters. Report the result — response includes `verificationCreated` and `metadataCreated` booleans. Done. (See [API Reference](references/api-reference.md) for request/response details.)
-- For **express**: load [Payment Execution](references/payment-execution.md) and follow steps 7a–7e. The agent will resolve the user's private key, write a payment script, execute it locally, and report the result.
+- For **basic**: call `POST /basic/submit` with `submitVerification: true` and all collected parameters. Include `tokenMetadata` in the request body when metadata fields were collected in Step 6a. Report the result — response includes `verificationCreated` and `metadataCreated` booleans. Done. (See [API Reference](references/api-reference.md) for request/response details.)
+- For **express**: load [Payment Execution](references/payment-execution.md) and follow steps 7a–7e. The agent will resolve the user's private key, write a payment script, execute it locally, and report the result. When metadata fields were collected, they are included in the execute request body as `tokenMetadata`.
+- For **metadata-only** (when `canVerify: false, canMetadata: true`): call `POST /basic/submit` with `submitVerification: false` and include `tokenMetadata` with the collected fields. Do not include verification parameters. Report `metadataCreated` result.
 
 ---
 
@@ -232,7 +278,7 @@ When collecting user input, handle these common mistakes gracefully instead of r
 15. **Never interpolate user input into source code** — User-provided values (description, Twitter handles, etc.) must be written to a separate `config.json` file and read at runtime. Embedding user input directly in TypeScript string literals enables code injection attacks.
 16. **API key required for submission endpoints** — `POST /basic/submit`, `GET /payments/express/craft-txn`, and `POST /payments/express/execute` all require an `x-api-key` header. Eligibility check endpoints are unauthenticated.
 17. **Rate limit: 2 requests/day per API key** — The submission endpoints are rate-limited to 2 requests per day per API key. Warn users before submitting.
-18. **Metadata is optional in combined endpoints** — The combined endpoints support optional `tokenMetadata` for setting token metadata alongside verification. If not provided, only verification is processed.
+18. **Metadata can be submitted with or without verification** — The combined endpoints support optional `tokenMetadata` for setting token metadata alongside verification. When `canVerify: false` but `canMetadata: true`, submit with `submitVerification: false` and only `tokenMetadata` to perform a metadata-only update. At least one of `submitVerification: true` or `tokenMetadata` must be provided.
 
 ---
 
