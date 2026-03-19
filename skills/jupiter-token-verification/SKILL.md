@@ -82,9 +82,31 @@ Ask the user what they want to do:
 
 If the user's message already makes their intent clear, skip this question.
 
-For **"update metadata" intent**: proceed to Step 2 (collect mint) → Step 3 (check token status). Step 3 will determine whether the token is already verified and whether metadata updates are available, then route accordingly.
+For **"update metadata" intent**: proceed to Step 3 (collect mint) → Step 4 (check eligibility). Step 2 (tier selection) is skipped — the basic eligibility endpoint will be used to check metadata availability.
 
-### 2. Collect Token Mint Address (always required)
+### 2. Choose Verification Tier
+
+Before collecting the mint address, determine which tier the user wants. This ensures only one eligibility endpoint is called later.
+
+**For "submit" or "check" intents:**
+
+**Auto-select from user intent:** If the user's original message already indicates which tier they want, use their choice directly:
+
+- Phrases like `express verification`, `paid verification`, `express flow` → auto-select **express**
+- Phrases like `basic verification`, `free verification` → auto-select **basic**
+
+**Otherwise, ask:**
+
+> Would you like **basic** (free) or **express** (1 JUP) verification?
+>
+> - **Basic** — free, standard review process
+> - **Express** — costs 1 JUP, paid from your wallet
+
+Default to `basic` if the user is unsure.
+
+**For "update metadata" intent:** Skip this step — tier selection is not needed.
+
+### 3. Collect Token Mint Address (always required)
 
 Ask:
 
@@ -96,57 +118,37 @@ Ask:
 - Typically 32–44 characters
 - If invalid, say: _"That doesn't look like a valid Solana mint address. It should be a base58 string like `So11111111111111111111111111111111111111112`. Please try again."_
 
-### 3. Check Token Status (automatic)
+### 4. Check Token Eligibility (single tier)
 
-After collecting the token mint, automatically check eligibility for **both** tiers before asking further questions:
+After collecting the mint, check eligibility for **only** the tier selected in Step 2 — do NOT call both endpoints:
 
-- `GET /combined/express/check-eligibility?tokenId={tokenId}`
-- `GET /combined/basic/check-eligibility?tokenId={tokenId}`
+- **Basic** (or metadata-only intent): `GET /combined/basic/check-eligibility?tokenId={tokenId}`
+- **Express**: `GET /combined/express/check-eligibility?tokenId={tokenId}`
 
-Use the combined results to determine which flow to follow:
+Use the result to determine which flow to follow:
 
-**A) Token is already verified** — both endpoints return `canVerify: false` and the `verificationError` messages indicate an existing (non-rejected) verification:
+**A) Token is already verified** — endpoint returns `canVerify: false` and the `verificationError` message indicates an existing (non-rejected) verification:
 
 > This token is **already verified** on Jupiter.
 
-| `canMetadata` (either endpoint) | Action |
+| `canMetadata` | Action |
 |---|---|
 | `true` | Offer metadata update: _"Would you like to **update the token metadata** (name, symbol, social links, etc.)?"_ If yes → proceed to Step 5 (API key) → Step 6a (metadata collection) → Step 7 (confirm) → Step 8 with `submitVerification: false`. If no → done. |
-| `false` (both) | Report: _"Metadata updates are also not available at this time ({metadataError})."_ Done. |
+| `false` | Report: _"Metadata updates are also not available at this time ({metadataError})."_ Done. |
 
-**B) Token can be verified** — at least one endpoint returned `canVerify: true`:
+**B) Token can be verified** — endpoint returned `canVerify: true`:
 
-Proceed to **Step 4** (Choose Verification Tier). Use the eligibility results to guide or constrain tier selection.
+Proceed to **Step 4a** (Check Metadata Availability), then continue to Step 5.
 
-**C) Token cannot be verified and is not already verified** — both return `canVerify: false` but the errors indicate something other than existing verification (e.g., token not found, not indexed):
+**C) Token cannot be verified** — `canVerify: false` with an error other than existing verification (e.g., token not found, not eligible for this tier):
 
-Report both `verificationError` messages. If `canMetadata: true` on either endpoint, offer a metadata-only update. Otherwise stop.
+Report the `verificationError`. If `canMetadata: true`, offer a metadata-only update. Otherwise stop.
 
-**For "check-only" intent** (user just wants to know status): synthesize results from both endpoints — report whether the token is eligible for basic and/or express verification, whether metadata updates are available, and any errors. Done — do not proceed to submission.
-
-### 4. Choose Verification Tier
-
-Only reached when Step 3 determined the token can be verified.
-
-**Auto-select when only one tier is eligible:** If only express returned `canVerify: true`, auto-select express and inform: _"Only express verification is available for this token ({basicVerificationError})."_ Vice versa for basic-only.
-
-**Auto-select from user intent:** If the user's original message already indicates which tier they want, skip this question and use their choice directly:
-
-- Phrases like `express verification`, `paid verification`, `express flow` → auto-select **express**
-- Phrases like `basic verification`, `free verification` → auto-select **basic**
-
-**Only ask if both tiers are eligible and intent is unclear:**
-
-> Would you like **basic** (free) or **express** (1 JUP) verification?
->
-> - **Basic** — free, standard review process
-> - **Express** — costs 1 JUP, paid from your wallet
-
-Default to `basic` if the user is unsure.
+**For "check-only" intent** (user just wants to know status): report whether the token is eligible for the selected tier, whether metadata updates are available, and any errors. Done — do not proceed to submission.
 
 ### 4a. Check Metadata Availability
 
-After tier selection, check the `canMetadata` result from the selected tier's eligibility response (already retrieved in Step 3):
+After confirming the token can be verified, check the `canMetadata` result from the eligibility response retrieved in Step 4:
 
 | `canMetadata` | Action |
 |---|---|
