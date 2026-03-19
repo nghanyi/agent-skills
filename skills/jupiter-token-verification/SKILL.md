@@ -47,13 +47,13 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 
 ## Intent Router
 
-| User intent                           | Endpoint                                        | Method | Auth    |
-| ------------------------------------- | ----------------------------------------------- | ------ | ------- |
-| Check express eligibility             | `/combined/express/check-eligibility?tokenId=…`  | `GET`  | None    |
-| Check basic eligibility               | `/combined/basic/check-eligibility?tokenId=…`    | `GET`  | None    |
-| Submit basic verification             | `/basic/submit`                                  | `POST` | API key |
-| Craft express payment transaction     | `/payments/express/craft-txn?senderAddress=…`    | `GET`  | API key |
-| Sign and execute express payment      | `/payments/express/execute`                      | `POST` | API key |
+| User intent                       | Endpoint                                        | Method | Auth    |
+| --------------------------------- | ----------------------------------------------- | ------ | ------- |
+| Check express eligibility         | `/combined/express/check-eligibility?tokenId=…` | `GET`  | None    |
+| Check basic eligibility           | `/combined/basic/check-eligibility?tokenId=…`   | `GET`  | None    |
+| Submit basic verification         | `/basic/submit`                                 | `POST` | API key |
+| Craft express payment transaction | `/payments/express/craft-txn?senderAddress=…`   | `GET`  | API key |
+| Sign and execute express payment  | `/payments/express/execute`                     | `POST` | API key |
 
 ## References
 
@@ -102,7 +102,7 @@ Before collecting the mint address, determine which tier the user wants. This en
 > - **Basic** — free, standard review process
 > - **Express** — costs 1 JUP, paid from your wallet
 
-Default to `basic` if the user is unsure.
+Default to `express` if the user is unsure, approvals are faster.
 
 **For "update metadata" intent:** Skip this step — tier selection is not needed.
 
@@ -131,10 +131,10 @@ Use the result to determine which flow to follow:
 
 > This token is **already verified** on Jupiter.
 
-| `canMetadata` | Action |
-|---|---|
-| `true` | Offer metadata update: _"Would you like to **update the token metadata** (name, symbol, social links, etc.)?"_ If yes → proceed to Step 5 (API key) → Step 6a (metadata collection) → Step 7 (confirm) → Step 8 with `submitVerification: false`. If no → done. |
-| `false` | Report: _"Metadata updates are also not available at this time ({metadataError})."_ Done. |
+| `canMetadata` | Action                                                                                                                                                                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `true`        | Offer metadata update: _"Would you like to **update the token metadata** (name, symbol, social links, etc.)?"_ If yes → proceed to Step 5 (API key) → Step 6a (metadata collection) → Step 7 (confirm) → Step 8 with `submitVerification: false`. If no → done. |
+| `false`       | Report: _"Metadata updates are also not available at this time ({metadataError})."_ Done.                                                                                                                                                                       |
 
 **B) Token can be verified** — endpoint returned `canVerify: true`:
 
@@ -150,10 +150,10 @@ Report the `verificationError`. If `canMetadata: true`, offer a metadata-only up
 
 After confirming the token can be verified, check the `canMetadata` result from the eligibility response retrieved in Step 4:
 
-| `canMetadata` | Action |
-|---|---|
-| `true` | Ask: _"Would you also like to **update token metadata** (name, symbol, social links, etc.) alongside your verification request?"_ If yes → metadata fields will be collected in Step 6a. If no → skip Step 6a. |
-| `false` | Inform: _"Metadata updates are not available for this token ({metadataError})."_ Skip Step 6a. |
+| `canMetadata` | Action                                                                                                                                                                                                         |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `true`        | Ask: _"Would you also like to **update token metadata** (name, symbol, social links, etc.) alongside your verification request?"_ If yes → metadata fields will be collected in Step 6a. If no → skip Step 6a. |
+| `false`       | Inform: _"Metadata updates are not available for this token ({metadataError})."_ Skip Step 6a.                                                                                                                 |
 
 ### 5. Resolve API Key
 
@@ -247,10 +247,10 @@ Present a summary of all collected parameters and ask for confirmation:
 
 If metadata fields were collected in Step 6a, add them to the summary:
 
-> | **Metadata**      |                             |
-> | **— Name**        | {value or _not provided_}   |
-> | **— Symbol**      | {value or _not provided_}   |
-> | _(etc. for each collected field)_ |              |
+> | **Metadata** | |
+> | **— Name** | {value or _not provided_} |
+> | **— Symbol** | {value or _not provided_} |
+> | _(etc. for each collected field)_ | |
 
 For **metadata-only** flow, adjust the heading: _"Here's a summary of your metadata update request:"_ and omit verification-only fields (tier, token twitter, your twitter, description).
 
@@ -275,7 +275,7 @@ When collecting user input, handle these common mistakes gracefully instead of r
 | `@jupiterexchange`                      | `https://x.com/jupiterexchange` | Yes — _"I'll format that as `https://x.com/jupiterexchange` — is that correct?"_ |
 | `jupiterexchange` (bare handle)         | `https://x.com/jupiterexchange` | Yes                                                                              |
 | `twitter.com/handle` (no https)         | `https://twitter.com/handle`    | Yes                                                                              |
-| `x.com/handle` (no https)              | `https://x.com/handle`          | Yes                                                                              |
+| `x.com/handle` (no https)               | `https://x.com/handle`          | Yes                                                                              |
 | Token mint with leading/trailing spaces | Trimmed string                  | No                                                                               |
 
 ---
