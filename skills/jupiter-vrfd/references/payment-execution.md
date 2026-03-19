@@ -34,7 +34,7 @@ cd "$TMPDIR" && npm init -y && npm install @solana/web3.js @solana/spl-token bs5
 
 ## 7c. Write the Payment Script
 
-Write a `pay.ts` script and a separate `config.json` file in the temp directory. The config file contains all user-provided parameters. The script reads parameters from `config.json` at runtime — user input is NEVER interpolated into source code to prevent code injection. For metadata updates, `tokenMetadata` should include only `tokenId` plus the fields the user explicitly chose to change. The script must:
+Write a `pay.ts` script and a separate `config.json` file in the temp directory. The config file contains all user-provided parameters. The script reads parameters from `config.json` at runtime — user input is NEVER interpolated into source code to prevent code injection. For metadata updates, `tokenMetadata` should include the **full merged object** (existing data from `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}` with user updates applied on top) so unchanged fields are preserved. The script must:
 
 1. Read the private key from an environment variable (`PRIVATE_KEY`) or keypair file path (`KEYPAIR_PATH`) passed at runtime
 2. Derive the wallet address from the private key using `Keypair.fromSecretKey`
@@ -77,8 +77,8 @@ const COMPUTE_BUDGET_PROGRAM_ID = new PublicKey(
 );
 
 // Read parameters from config file — NEVER interpolate user input into source code
-// Only metadata fields the user explicitly chose to change are included in tokenMetadata.
-// Untouched fields are omitted to avoid accidental formatting-only edits.
+// tokenMetadata contains the full merged object (existing data + user updates)
+// so unchanged fields are preserved server-side.
 const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
 const TOKEN_ID: string = config.tokenId;
 const TWITTER_HANDLE: string = config.twitterHandle ?? "";
@@ -232,7 +232,7 @@ async function main() {
 
   // Step 5: Execute — server co-signs and broadcasts
   // `twitterHandle` and `description` are always sent because the current execute schema requires strings.
-  // tokenMetadata remains minimal: only changed fields plus tokenId.
+  // tokenMetadata contains the full merged object so unchanged fields are preserved.
   const executeBody: Record<string, unknown> = {
     transaction: signedTxBase64,
     requestId,

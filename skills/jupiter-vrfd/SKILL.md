@@ -171,12 +171,13 @@ For full API key management details (listing keys, revoking keys), see [API Refe
 
 Collect these in order. For each, show what it is and why it matters:
 
-**a) Token's Twitter/X URL** (required for express, optional for basic)
+**a) Token's Twitter/X URL**
 
 > What is the **token project's Twitter/X URL**?
 > Example: `https://x.com/jupiterexchange`
 
-For **basic** tier, the user may skip this — if skipped, omit the field entirely from the request (do not send an empty string).
+- **Express tier:** This field is **required**. Do not allow the user to skip it.
+- **Basic tier:** This field is optional. If the user skips it, omit the field entirely from the request (do not send an empty string).
 
 Validate: must be a full URL starting with `https://x.com/` or `https://twitter.com/` followed by a valid username (1–15 chars, alphanumeric + underscore). If the user provides a bare handle like `@handle`, auto-convert it to `https://x.com/handle` and confirm with the user.
 
@@ -187,12 +188,13 @@ Validate: must be a full URL starting with `https://x.com/` or `https://twitter.
 
 Same validation as above. **If skipped, omit this field entirely from the request — do not send an empty string.**
 
-**c) Description** (required for express, optional for basic)
+**c) Description**
 
 > Please provide a **short description** of the token.
 > Example: _"Community governance token for XYZ protocol"_
 
-For **basic** tier, the user may skip this — if skipped, omit the field entirely from the request (do not send an empty string).
+- **Express tier:** This field is **required**. Do not allow the user to skip it.
+- **Basic tier:** This field is optional. If the user skips it, omit the field entirely from the request (do not send an empty string).
 
 **d) Wallet Address** (required for all flows)
 
