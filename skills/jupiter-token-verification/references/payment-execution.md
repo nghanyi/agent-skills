@@ -1,6 +1,6 @@
 # Express Payment Execution
 
-When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address is derived from the private key — it is not collected separately.
+When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was already collected in Step 6d of the main flow.
 
 ## 7a. Resolve Private Key
 
@@ -14,7 +14,7 @@ The agent resolves the user's private key using this priority order:
 
 > **NEVER accept a private key directly in chat.** If a user pastes a raw private key in the conversation, warn them that this is insecure (keys persist in chat history and may be logged) and instruct them to use a `.env` file or keypair file path instead. Do not use the pasted key.
 
-Once the private key is obtained, **derive the wallet address** from it (via `Keypair.fromSecretKey`) — no need to ask for the wallet address separately.
+Once the private key is obtained, derive the wallet address from it (via `Keypair.fromSecretKey`) and confirm it matches the wallet address collected in Step 6d. If they don't match, warn the user and ask which to use.
 
 > **Private Key Security Rules:**
 > - The private key MUST stay local. It is NEVER sent to any server, API, or external service.
@@ -102,7 +102,7 @@ if (!API_KEY) {
 }
 
 async function main() {
-  // Derive wallet from private key — no need to ask for wallet address separately
+  // Derive wallet from private key
   let keypair: Keypair;
   if (PRIVATE_KEY) {
     keypair = Keypair.fromSecretKey(bs58.decode(PRIVATE_KEY));

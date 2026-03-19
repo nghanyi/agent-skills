@@ -189,11 +189,9 @@ Same validation as above.
 > Please provide a **short description** of the token.
 > Example: _"Community governance token for XYZ protocol"_ > _(Type "skip" to leave blank)_
 
-**d) Wallet Address** (required for basic tier and metadata-only flows)
+**d) Wallet Address** (required for all flows)
 
-A wallet address is needed for `POST /basic/submit` (basic verification and metadata-only updates). For **express verification with payment**, the wallet is derived during the payment execution flow (Step 8) — skip this step in that case.
-
-**When this step applies:** basic tier, OR any metadata-only flow (regardless of tier — e.g., express tier where token is already verified and only metadata is being updated).
+A wallet address is needed for both `POST /basic/submit` and the express payment flow. Collect it once here so it's available regardless of tier.
 
 Resolve the wallet address automatically before asking the user:
 
@@ -204,7 +202,7 @@ Resolve the wallet address automatically before asking the user:
 
 > What is your **Solana wallet address**?
 
-Validate: same base58 format as token mint.
+**Validation (user-provided addresses only):** Use `new PublicKey(address)` from `@solana/web3.js` to validate. If the constructor throws, the address is invalid — tell the user and ask again. Do not apply this validation when the address was derived from a private key (it is already guaranteed valid).
 
 ### 6a. Collect Metadata Fields (when metadata is included)
 
