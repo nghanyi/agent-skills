@@ -22,7 +22,7 @@ When writing `config.json` in Step 7c, include the **location** of secrets — n
 - `"envPath": "/absolute/path/to/.env"` — the `.env` file containing secrets (used for both private key and API key)
 - `"envKeyName": "PRIVATE_KEY"` — env var name for the private key (omit if using keypairPath)
 - OR `"keypairPath": "/absolute/path/to/keypair.json"` — path to a Solana keypair file (omit if using envPath for private key)
-- `"apiKeyEnvName": "JUPITER_API_KEY"` — env var name for the API key (defaults to `JUPITER_API_KEY`)
+- `"apiKeyEnvName": "JUPITER_VRFD_API_KEY"` — env var name for the API key (defaults to `JUPITER_VRFD_API_KEY`)
 
 > **Private Key Security Rules:**
 > - The private key MUST stay local. It is NEVER sent to any server, API, or external service.
@@ -128,7 +128,7 @@ if (!PRIVATE_KEY && !KEYPAIR_PATH) {
 }
 
 // Resolve API key — loaded by the SCRIPT from the user's .env, never by the agent
-const API_KEY_NAME: string = config.apiKeyEnvName ?? "JUPITER_API_KEY";
+const API_KEY_NAME: string = config.apiKeyEnvName ?? "JUPITER_VRFD_API_KEY";
 const API_KEY = process.env[API_KEY_NAME];
 if (!API_KEY) {
   console.error(
@@ -326,7 +326,7 @@ Write a `config.json` file in the same temp directory with the collected paramet
   "envPath": "<absolute path to user's .env file — OMIT if using keypairPath without .env>",
   "envKeyName": "<env var name for private key, e.g. 'PRIVATE_KEY' or 'SOLANA_PRIVATE_KEY' — OMIT if using keypairPath>",
   "keypairPath": "<absolute path to keypair.json — OMIT if using envPath>",
-  "apiKeyEnvName": "<env var name for API key, e.g. 'JUPITER_API_KEY' — defaults to 'JUPITER_API_KEY'>",
+  "apiKeyEnvName": "<env var name for API key, e.g. 'JUPITER_VRFD_API_KEY' — defaults to 'JUPITER_VRFD_API_KEY'>",
   "walletAddress": "<user-provided wallet address that must match the signing key>",
   "tokenId": "<collected token mint>",
   "twitterHandle": "<collected twitter URL — OMIT THIS KEY if user skipped>",
@@ -345,12 +345,12 @@ Write a `config.json` file in the same temp directory with the collected paramet
 }
 ```
 
-**Example:** If the agent found `PRIVATE_KEY` and `JUPITER_API_KEY` in `/Users/alice/project/.env`:
+**Example:** If the agent found `PRIVATE_KEY` and `JUPITER_VRFD_API_KEY` in `/Users/alice/project/.env`:
 ```json
 {
   "envPath": "/Users/alice/project/.env",
   "envKeyName": "PRIVATE_KEY",
-  "apiKeyEnvName": "JUPITER_API_KEY",
+  "apiKeyEnvName": "JUPITER_VRFD_API_KEY",
   "walletAddress": "8xDr...",
   "tokenId": "So11111111111111111111111111111111111111112",
   "twitterHandle": "https://x.com/jupiterexchange",
@@ -363,7 +363,7 @@ Write a `config.json` file in the same temp directory with the collected paramet
 {
   "envPath": "/Users/alice/project/.env",
   "keypairPath": "/Users/alice/.config/solana/id.json",
-  "apiKeyEnvName": "JUPITER_API_KEY",
+  "apiKeyEnvName": "JUPITER_VRFD_API_KEY",
   "walletAddress": "8xDr...",
   "tokenId": "So11111111111111111111111111111111111111112",
   "twitterHandle": "https://x.com/jupiterexchange",
@@ -413,13 +413,13 @@ Parse the output:
 | Error Pattern       | Likely Cause                                         | Suggestion                                              |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
 | `NO_KEY`            | Private key not found in `.env` or keypair file      | Ensure `PRIVATE_KEY` is set in `.env` or provide a valid `keypairPath` |
-| `NO_API_KEY`        | API key not found in `.env`                          | Ensure `JUPITER_API_KEY` is set in `.env`                |
+| `NO_API_KEY`        | API key not found in `.env`                          | Ensure `JUPITER_VRFD_API_KEY` is set in `.env`           |
 | `INVALID_WALLET`    | The provided wallet address is not a valid Solana public key | Check the `walletAddress` value in `config.json`         |
 | `WALLET_MISMATCH`   | The provided wallet does not match the signing key   | Verify the wallet address and private key refer to the same wallet |
 | `ENV_NOT_FOUND`     | The `.env` file path in config.json does not exist   | Check the `envPath` in config.json points to a valid file |
 | `KEYPAIR_NOT_FOUND` | The keypair file path does not exist                 | Check the `keypairPath` in config.json points to a valid file |
 | `CRAFT_FAILED:400`  | Invalid wallet or insufficient JUP balance           | Check wallet has ≥1 JUP + small SOL for fees             |
-| `CRAFT_FAILED:401`  | Invalid or missing API key                           | Check `JUPITER_API_KEY` is set correctly                  |
+| `CRAFT_FAILED:401`  | Invalid or missing API key                           | Check `JUPITER_VRFD_API_KEY` is set correctly             |
 | `CRAFT_FAILED:429`  | Rate limited                                         | Wait and retry later, or use a different API key          |
 | `TX_VERIFY_FAILED`  | Transaction contents don't match expectations        | Possible API change or malicious response — do not sign   |
 | `EXECUTE_FAILED`    | Transaction expired, network error, or co-sign issue | Re-run the script (crafts a fresh transaction)           |

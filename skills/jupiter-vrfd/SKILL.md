@@ -111,7 +111,7 @@ Handle the result:
 
 Do this silently after the eligibility check — no user interaction needed unless values are missing.
 
-**a) API Key:** Check that `.env` / `.env.local` contains `JUPITER_API_KEY` or `JUP_API_KEY`. Only check that the variable **exists** — do NOT read its value. Note the file path and variable name silently. If not found, address in Step 6. See [API Reference — Managing Keys](references/api-reference.md#managing-keys).
+**a) API Key:** Check that `.env` / `.env.local` contains `JUPITER_VRFD_API_KEY`, `JUP_VRFD__API_KEY`, or `VRFD_API_KEY`. Only check that the variable **exists** — do NOT read its value. Note the file path and variable name silently. If not found, address in Step 6. See [API Reference — Managing Keys](references/api-reference.md#managing-keys).
 
 **b) Private Key Source (express only):**
 
@@ -129,7 +129,7 @@ For **basic** submissions, skip private key checks.
 
 Collect all missing fields in a **single prompt**. Skip fields already extracted (Step 0) or auto-resolved (Step 5).
 
-**If API key was not found in Step 5a**: Direct the user to `https://vrfd-auth-api-dev.jup.ag/api/keys/new` (handles login + key generation). Warn: key shown once, cannot be retrieved. Creating a new key revokes any existing key. Store in `.env` as `JUPITER_API_KEY=<key>`, ensure `.env` is in `.gitignore`.
+**If API key was not found in Step 5a**: Direct the user to `https://vrfd-auth-api-dev.jup.ag/api/keys/new` (handles login + key generation). Warn: key shown once, cannot be retrieved. Creating a new key revokes any existing key. Store in `.env` as `JUPITER_VRFD_API_KEY=<key>`, ensure `.env` is in `.gitignore`.
 
 **Field requirements:**
 
