@@ -10,6 +10,7 @@ Some endpoints require an API key passed via the `x-api-key` header:
 | -------- | ------------- |
 | `GET /combined/express/check-eligibility` | None |
 | `GET /combined/basic/check-eligibility` | None |
+| `GET /tokenMetadata/getFromRpcAndSearch/:tokenId` | None |
 | `POST /basic/submit` | API key |
 | `GET /payments/express/craft-txn` | API key |
 | `POST /payments/express/execute` | API key |
@@ -39,14 +40,7 @@ These endpoints are on the **auth-api** (`https://vrfd-auth-api-dev.jup.ag`), no
 
 ### Rate Limits
 
-Endpoints protected by API key enforce a daily request limit per user (or IP if unauthenticated):
-
-| Tier       | Daily Limit                 |
-| ---------- | --------------------------- |
-| Public     | 2 requests/day per endpoint |
-| Enterprise | Unlimited                   |
-
-The combined flow endpoints (`craft-txn`, `execute`, `submit`) are all rate limited under the `combined` namespace.
+Endpoints protected by API key enforce a daily request limit. If a request is rate-limited, the API returns an appropriate error response — handle it accordingly.
 
 ---
 
@@ -65,12 +59,12 @@ Before any submission (and before any payment in express), the system checks whe
 
 - No existing verification exists for the token
 - An existing verification was **rejected** (resubmission allowed)
-- Upgrading from basic to premium tier
+- Upgrading from basic to express tier
 
 **Verification cannot proceed if:**
 
 - A same-tier verification already exists (not rejected)
-- Attempting to downgrade from premium to basic (with < 3 evaluations)
+- Attempting to downgrade from express to basic (with < 3 evaluations)
 
 **Metadata can proceed if:**
 
@@ -371,7 +365,7 @@ x-api-key: your-api-key-here
 }
 ```
 
-On success, the server automatically creates a **express** verification request for the token. The `verificationCreated` and `metadataCreated` fields indicate what was created.
+On success, the server automatically creates an **express** verification request for the token. The `verificationCreated` and `metadataCreated` fields indicate what was created.
 
 ---
 

@@ -172,7 +172,7 @@ Silently check the environment before prompting the user. Do this immediately af
 
 Check that `.env` / `.env.local` contains a `JUPITER_API_KEY` or `JUP_API_KEY` variable. Only check that the variable **exists** — do NOT read or extract its value. The payment script loads it directly at runtime. If found, note the file path and variable name silently. If not found, it will be addressed in Step 6.
 
-The key is passed via the `x-api-key` header. Rate limit: 2 requests/day per key. For full API key management details, see [API Reference — Managing Keys](references/api-reference.md#managing-keys).
+The key is passed via the `x-api-key` header. For full API key management details, see [API Reference — Managing Keys](references/api-reference.md#managing-keys).
 
 **b) Private Key Source (express tier only)**
 

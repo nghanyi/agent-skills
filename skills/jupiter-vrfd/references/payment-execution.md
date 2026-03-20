@@ -420,7 +420,7 @@ Parse the output:
 | `KEYPAIR_NOT_FOUND` | The keypair file path does not exist                 | Check the `keypairPath` in config.json points to a valid file |
 | `CRAFT_FAILED:400`  | Invalid wallet or insufficient JUP balance           | Check wallet has ≥1 JUP + small SOL for fees             |
 | `CRAFT_FAILED:401`  | Invalid or missing API key                           | Check `JUPITER_API_KEY` is set correctly                  |
-| `CRAFT_FAILED:429`  | Rate limited (2 requests/day per key)                | Wait until the next day or use a different API key        |
+| `CRAFT_FAILED:429`  | Rate limited                                         | Wait and retry later, or use a different API key          |
 | `TX_VERIFY_FAILED`  | Transaction contents don't match expectations        | Possible API change or malicious response — do not sign   |
 | `EXECUTE_FAILED`    | Transaction expired, network error, or co-sign issue | Re-run the script (crafts a fresh transaction)           |
 | `EXCEPTION`         | Script crash (network, dependency issue)             | Check Node.js v18+, check network connectivity           |
