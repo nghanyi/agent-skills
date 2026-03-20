@@ -170,21 +170,23 @@ Silently check the environment before prompting the user. Do this immediately af
 
 **a) API Key**
 
-Check `.env` / `.env.local` for `JUPITER_API_KEY` or `JUP_API_KEY`. If found, use it silently. If not found, it will be addressed in Step 6.
+Check that `.env` / `.env.local` contains a `JUPITER_API_KEY` or `JUP_API_KEY` variable. Only check that the variable **exists** — do NOT read or extract its value. The payment script loads it directly at runtime. If found, note the file path and variable name silently. If not found, it will be addressed in Step 6.
 
 The key is passed via the `x-api-key` header. Rate limit: 2 requests/day per key. For full API key management details, see [API Reference — Managing Keys](references/api-reference.md#managing-keys).
 
 **b) Private Key & Wallet (express tier only)**
 
-For **express** submissions, check for a private key before asking for a wallet address:
+For **express** submissions, check for a private key source before asking for a wallet address:
 
-1. Check `.env` / `.env.local` for `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY`
+1. Check that `.env` / `.env.local` contains a `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY` variable — only check that the variable **exists**, do NOT read the value
 2. If not found, check for a keypair file at `~/.config/solana/id.json`
-3. If found, derive the wallet address via `Keypair.fromSecretKey` and note the key source for later use in the payment phase ([Payment Execution — Step 7a](references/payment-execution.md#7a-resolve-private-key))
+3. If found, note the **file path and variable name** for later use in the payment phase ([Payment Execution — Step 7a](references/payment-execution.md#7a-locate-private-key-source))
 
-If the private key is found, the wallet address is auto-resolved — do not ask for it in Step 6. Inform the user which wallet will be used (e.g., _"Using wallet `8xDr...` from your .env"_).
+> **SECURITY:** The agent must NEVER read the contents of `.env` files or keypair files containing private keys. Only confirm the file exists and which variable name holds the key. The payment script loads secrets directly at runtime.
 
-If not found, the wallet address will be collected in Step 6, and the private key will be resolved later during payment execution.
+If the private key source is found, the wallet address still needs to be collected in Step 6 (since the agent cannot derive it without reading the key). Inform the user that a private key was found (e.g., _"Found `PRIVATE_KEY` in your .env — the payment script will use it directly"_).
+
+If not found, the wallet address will be collected in Step 6, and the private key source will be resolved later during payment execution.
 
 For **basic** submissions, do not check for private keys — only a wallet address is needed, collected in Step 6.
 

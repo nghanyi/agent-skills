@@ -1,27 +1,32 @@
 # Express Payment Execution
 
-When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was either auto-derived from the private key in Step 5b or collected in Step 6 of the main flow.
+When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was collected in Step 6 of the main flow.
 
-## 7a. Resolve Private Key
+## 7a. Locate Private Key Source
 
-**If the private key was already found in Step 5b** of the main flow, reuse that key source — do not re-resolve.
+**If the private key source was already found in Step 5b** of the main flow, reuse that source — do not re-resolve.
 
-Otherwise, resolve the user's private key using this priority order:
+The agent's job is to find **where** the private key is stored — never to read the key value itself. Locate the key source using this priority order:
 
-1. **Check `.env` files** — Look for a `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY` variable in `.env`, `.env.local`, or similar files in the current project directory. If found, use it directly.
-2. **Check for keypair file** — Look for a Solana keypair JSON file (e.g., `~/.config/solana/id.json` or a path provided by the user). Load the keypair using `Keypair.fromSecretKey(new Uint8Array(JSON.parse(fs.readFileSync(path, 'utf8'))))`.
+1. **Check `.env` files** — Look for a `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY` variable name in `.env`, `.env.local`, or similar files in the current project directory. If found, note the **file path and variable name** (e.g., `.env` contains `PRIVATE_KEY`). Do NOT read or extract the actual key value.
+2. **Check for keypair file** — Look for a Solana keypair JSON file (e.g., `~/.config/solana/id.json` or a path provided by the user). If found, note the **file path**.
 3. **Ask the user** — If no key is found via either method, ask the user to either:
-   - Set it in a `.env` file (e.g., `PRIVATE_KEY=<base58-key>`) and the agent will read it from there
+   - Set it in a `.env` file (e.g., `PRIVATE_KEY=<base58-key>`) and provide the file path
    - Provide the path to a Solana keypair JSON file
 
 > **NEVER accept a private key directly in chat.** If a user pastes a raw private key in the conversation, warn them that this is insecure (keys persist in chat history and may be logged) and instruct them to use a `.env` file or keypair file path instead. Do not use the pasted key.
 
-Once the private key is obtained, derive the wallet address from it (via `Keypair.fromSecretKey`) and confirm it matches the wallet address collected in Step 6. If they don't match, warn the user and ask which to use.
+> **NEVER read the contents of `.env` files or keypair files that contain private keys.** The agent must only confirm the file exists and which variable name holds the key. The script itself loads secrets at runtime, so the agent never needs to see the actual values. This prevents secret values from appearing in agent conversation context, tool-call logs, or chat history.
 
-When writing `config.json` in Step 7c, include either `"privateKey": "<base58-key>"` (read from the user's `.env`) or `"keypairPath": "/path/to/keypair.json"` — never both. Include `"apiKey": "<key>"` (read from the user's `.env`). This ensures secrets stay in a temp file that is cleaned up in Step 7e, and are **never passed as shell arguments**.
+When writing `config.json` in Step 7c, include the **location** of secrets — not the values:
+- `"envPath": "/absolute/path/to/.env"` — the `.env` file containing secrets (used for both private key and API key)
+- `"envKeyName": "PRIVATE_KEY"` — env var name for the private key (omit if using keypairPath)
+- OR `"keypairPath": "/absolute/path/to/keypair.json"` — path to a Solana keypair file (omit if using envPath for private key)
+- `"apiKeyEnvName": "JUPITER_API_KEY"` — env var name for the API key (defaults to `JUPITER_API_KEY`)
 
 > **Private Key Security Rules:**
 > - The private key MUST stay local. It is NEVER sent to any server, API, or external service.
+> - The agent NEVER reads, extracts, or handles the private key value. It only passes file paths to the script.
 > - The key is used ONLY to sign the transaction on the user's machine. Only the **signed transaction** (not the key) is sent to the Jupiter API.
 > - The script runs entirely locally — it reads the key, signs, and sends only the signed output.
 > - Recommend the user use a dedicated wallet with minimal funds, not their main holdings wallet.
@@ -33,21 +38,22 @@ Create a temporary directory and install dependencies:
 
 ```bash
 TMPDIR=$(mktemp -d /tmp/jup-verify-XXXXXX)
-cd "$TMPDIR" && npm init -y && npm install @solana/web3.js @solana/spl-token bs58
+cd "$TMPDIR" && npm init -y && npm install @solana/web3.js @solana/spl-token bs58 dotenv
 ```
 
 ## 7c. Write the Payment Script
 
-Write a `pay.ts` script and a separate `config.json` file in the temp directory. The config file contains all user-provided parameters. The script reads parameters from `config.json` at runtime — user input is NEVER interpolated into source code to prevent code injection. For metadata updates, `tokenMetadata` should include the **full merged object** (existing data from `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}` with user updates applied on top) so unchanged fields are preserved. The script must:
+Write a `pay.ts` script and a separate `config.json` file in the temp directory. The config file contains user-provided parameters and **paths to secret files** (never the secret values themselves). The script loads secrets directly from the user's `.env` or keypair file at runtime — the agent never reads, extracts, or handles secret values. For metadata updates, `tokenMetadata` should include the **full merged object** (existing data from `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}` with user updates applied on top) so unchanged fields are preserved. The script must:
 
-1. Read secrets from `config.json` — the agent writes the private key source (`.env` path or keypair file path) and API key into the config file so they are **never passed as shell arguments** (which would expose them in `ps` output and agent logs)
-2. Derive the wallet address from the private key using `Keypair.fromSecretKey`
-3. Call `GET /payments/express/craft-txn?senderAddress={derived-wallet}` with `x-api-key` header to get the unsigned transaction
-4. Deserialize as a `VersionedTransaction` (matching the production UI implementation)
-5. Verify the transaction contents before signing: decode the compiled instructions, confirm there is exactly one SPL Token transfer instruction (plus optional compute budget instructions), confirm the amount does not exceed 1 JUP, confirm the destination matches the expected receiver ATA, and reject if any unexpected instructions are present
-6. Sign locally with `transaction.sign([keypair])` and serialize
-7. Call `POST /payments/express/execute` with `x-api-key` header, the signed transaction, and all verification parameters
-8. Print `SUCCESS:<signature>` on success or `ERROR:<code>:<message>` on failure
+1. Read secret **locations** from `config.json` — the agent writes file paths and env var names so the script can load secrets directly. The agent never reads or handles secret values.
+2. Load the private key from the user's `.env` file (via `dotenv`) or keypair file, and the API key from the `.env` file
+3. Derive the wallet address from the private key using `Keypair.fromSecretKey`
+4. Call `GET /payments/express/craft-txn?senderAddress={derived-wallet}` with `x-api-key` header to get the unsigned transaction
+5. Deserialize as a `VersionedTransaction` (matching the production UI implementation)
+6. Verify the transaction contents before signing: decode the compiled instructions, confirm there is exactly one SPL Token transfer instruction (plus optional compute budget instructions), confirm the amount does not exceed 1 JUP, confirm the destination matches the expected receiver ATA, and reject if any unexpected instructions are present
+7. Sign locally with `transaction.sign([keypair])` and serialize
+8. Call `POST /payments/express/execute` with `x-api-key` header, the signed transaction, and all verification parameters
+9. Print `SUCCESS:<signature>` on success or `ERROR:<code>:<message>` on failure
 
 **Current API quirk:** `POST /payments/express/execute` currently validates `twitterHandle` and `description` as required strings, even for metadata-only requests where no verification data is being submitted. If the user did not provide those fields, send `twitterHandle: ""` and `description: ""` instead of inventing values.
 
@@ -57,8 +63,8 @@ The script MUST include these security comments:
 // SECURITY: Private key is used ONLY for local signing.
 // Only the signed transaction is sent to the Jupiter API.
 // The private key NEVER leaves this machine.
-// SECURITY: Secrets (private key source, API key) are read from config.json,
-// NEVER passed as shell arguments (which would expose them in `ps` output and agent logs).
+// SECURITY: The agent NEVER reads secret values. config.json contains only file paths
+// and env var names — the script loads secrets directly from the user's files at runtime.
 ```
 
 **Template script:**
@@ -67,8 +73,8 @@ The script MUST include these security comments:
 // SECURITY: Private key is used ONLY for local signing.
 // Only the signed transaction is sent to the Jupiter API.
 // The private key NEVER leaves this machine.
-// SECURITY: Secrets (private key source, API key) are read from config.json,
-// NEVER passed as shell arguments (which would expose them in `ps` output and agent logs).
+// SECURITY: The agent NEVER reads secret values. config.json contains only file paths
+// and env var names — the script loads secrets directly from the user's files at runtime.
 
 import { Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import {
@@ -77,6 +83,8 @@ import {
 } from "@solana/spl-token";
 import bs58 from "bs58";
 import fs from "fs";
+import path from "path";
+import dotenv from "dotenv";
 
 const BASE_URL = "https://token-verification-dev-api.jup.ag";
 const JUP_MINT = new PublicKey("JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN");
@@ -84,9 +92,9 @@ const COMPUTE_BUDGET_PROGRAM_ID = new PublicKey(
   "ComputeBudget111111111111111111111111111111"
 );
 
-// Read ALL parameters from config file — NEVER interpolate user input into source code.
-// Secrets (privateKey/keypairPath, apiKey) are also in config.json so they are
-// never passed as shell arguments, which would leak them in `ps` and agent logs.
+// Read parameters and secret LOCATIONS from config file.
+// config.json contains file paths and env var names — NEVER secret values.
+// The script loads secrets directly from the user's .env / keypair files.
 // tokenMetadata contains the full merged object (existing data + user updates)
 // so unchanged fields are preserved server-side.
 const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
@@ -96,21 +104,33 @@ const SENDER_TWITTER: string | undefined = config.senderTwitterHandle ?? undefin
 const DESCRIPTION: string = config.description ?? "";
 const TOKEN_METADATA: Record<string, unknown> | undefined = config.tokenMetadata ?? undefined;
 
-// Read private key source from config — NEVER from shell arguments
-const PRIVATE_KEY: string | undefined = config.privateKey;
+// Load secrets from the user's .env file if an envPath is provided
+if (config.envPath) {
+  const envFilePath = path.resolve(config.envPath);
+  if (!fs.existsSync(envFilePath)) {
+    console.error(`ERROR:ENV_NOT_FOUND:File not found: ${envFilePath}`);
+    process.exit(1);
+  }
+  dotenv.config({ path: envFilePath });
+}
+
+// Resolve private key — loaded by the SCRIPT from the user's files, never by the agent
 const KEYPAIR_PATH: string | undefined = config.keypairPath;
+const ENV_KEY_NAME: string = config.envKeyName ?? "PRIVATE_KEY";
+const PRIVATE_KEY = process.env[ENV_KEY_NAME];
 if (!PRIVATE_KEY && !KEYPAIR_PATH) {
   console.error(
-    "ERROR:NO_KEY:Set privateKey or keypairPath in config.json"
+    `ERROR:NO_KEY:No private key found. Expected env var "${ENV_KEY_NAME}" in ${config.envPath ?? ".env"} or keypairPath in config.json`
   );
   process.exit(1);
 }
 
-// Read API key from config — NEVER from shell arguments
-const API_KEY: string | undefined = config.apiKey;
+// Resolve API key — loaded by the SCRIPT from the user's .env, never by the agent
+const API_KEY_NAME: string = config.apiKeyEnvName ?? "JUPITER_API_KEY";
+const API_KEY = process.env[API_KEY_NAME];
 if (!API_KEY) {
   console.error(
-    "ERROR:NO_API_KEY:Set apiKey in config.json"
+    `ERROR:NO_API_KEY:No API key found. Expected env var "${API_KEY_NAME}" in ${config.envPath ?? ".env"}`
   );
   process.exit(1);
 }
@@ -121,7 +141,12 @@ async function main() {
   if (PRIVATE_KEY) {
     keypair = Keypair.fromSecretKey(bs58.decode(PRIVATE_KEY));
   } else {
-    const secret = JSON.parse(fs.readFileSync(KEYPAIR_PATH!, "utf8"));
+    const keypairFilePath = path.resolve(KEYPAIR_PATH!);
+    if (!fs.existsSync(keypairFilePath)) {
+      console.error(`ERROR:KEYPAIR_NOT_FOUND:File not found: ${keypairFilePath}`);
+      process.exit(1);
+    }
+    const secret = JSON.parse(fs.readFileSync(keypairFilePath, "utf8"));
     keypair = Keypair.fromSecretKey(new Uint8Array(secret));
   }
   const senderAddress = keypair.publicKey.toBase58();
@@ -278,13 +303,14 @@ main().catch((err) => {
 });
 ```
 
-Write a `config.json` file in the same temp directory with the collected parameters **and secrets**. The config file is the single source for all runtime values — secrets are NEVER passed as shell arguments (which would expose them in `ps` output and agent logs). For `tokenMetadata`, include the **full merged object** (existing data from `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}` with user updates applied on top) so unchanged fields are preserved:
+Write a `config.json` file in the same temp directory with the collected parameters and **paths to secret files** (never the secret values). The script loads secrets directly from the user's files at runtime. For `tokenMetadata`, include the **full merged object** (existing data from `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}` with user updates applied on top) so unchanged fields are preserved:
 
 ```json
 {
-  "privateKey": "<base58 private key from .env — OMIT if using keypairPath>",
-  "keypairPath": "</path/to/keypair.json — OMIT if using privateKey>",
-  "apiKey": "<JUPITER_API_KEY value from .env>",
+  "envPath": "<absolute path to user's .env file — OMIT if using keypairPath without .env>",
+  "envKeyName": "<env var name for private key, e.g. 'PRIVATE_KEY' or 'SOLANA_PRIVATE_KEY' — OMIT if using keypairPath>",
+  "keypairPath": "<absolute path to keypair.json — OMIT if using envPath>",
+  "apiKeyEnvName": "<env var name for API key, e.g. 'JUPITER_API_KEY' — defaults to 'JUPITER_API_KEY'>",
   "tokenId": "<collected token mint>",
   "twitterHandle": "<collected twitter URL — OMIT THIS KEY if user skipped>",
   "senderTwitterHandle": "<collected sender twitter URL — OMIT THIS KEY if user skipped>",
@@ -302,9 +328,33 @@ Write a `config.json` file in the same temp directory with the collected paramet
 }
 ```
 
+**Example:** If the agent found `PRIVATE_KEY` and `JUPITER_API_KEY` in `/Users/alice/project/.env`:
+```json
+{
+  "envPath": "/Users/alice/project/.env",
+  "envKeyName": "PRIVATE_KEY",
+  "apiKeyEnvName": "JUPITER_API_KEY",
+  "tokenId": "So11111111111111111111111111111111111111112",
+  "twitterHandle": "https://x.com/jupiterexchange",
+  "description": "Official wrapped SOL"
+}
+```
+
+**Example:** If the agent found a keypair file and API key in `.env`:
+```json
+{
+  "envPath": "/Users/alice/project/.env",
+  "keypairPath": "/Users/alice/.config/solana/id.json",
+  "apiKeyEnvName": "JUPITER_API_KEY",
+  "tokenId": "So11111111111111111111111111111111111111112",
+  "twitterHandle": "https://x.com/jupiterexchange",
+  "description": "Official wrapped SOL"
+}
+```
+
 Use `JSON.stringify()` to write this file, ensuring all user-provided values are properly escaped. NEVER embed user input directly into TypeScript source code — this prevents code injection attacks.
 
-> **SECURITY:** The `config.json` file contains secrets (private key, API key). It lives in a temp directory that is deleted in Step 7e. The agent must NEVER log, print, or display the contents of `config.json` to the user — only write it silently.
+> **SECURITY:** `config.json` contains NO secret values — only file paths and env var names. The script loads secrets directly from the user's own files at runtime. The agent must NEVER read the contents of `.env` files or keypair files containing private keys.
 
 ## 7d. Execute the Script
 
@@ -320,7 +370,7 @@ Fallback if `tsx` is not available:
 cd "$TMPDIR" && npx ts-node pay.ts
 ```
 
-> **SECURITY:** Never pass `PRIVATE_KEY`, `KEYPAIR_PATH`, or `JUPITER_API_KEY` as inline shell arguments (e.g., `PRIVATE_KEY="..." npx tsx pay.ts`). This exposes secrets in `ps` output, shell history, and agent tool-call logs. The script reads all secrets from `config.json` instead.
+> **SECURITY:** Never pass secrets as inline shell arguments (e.g., `PRIVATE_KEY="..." npx tsx pay.ts`). This exposes secrets in `ps` output, shell history, and agent tool-call logs. The script loads secrets directly from the user's `.env` and keypair files — `config.json` only contains file paths and env var names, never secret values.
 
 Parse the output:
 - `SUCCESS:<signature>` → payment succeeded
@@ -343,8 +393,10 @@ Parse the output:
 
 | Error Pattern       | Likely Cause                                         | Suggestion                                              |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
-| `NO_KEY`            | Private key not provided                             | Set `privateKey` or `keypairPath` in config.json (agent reads from `.env` or keypair file) |
-| `NO_API_KEY`        | API key not provided                                 | Set `apiKey` in config.json (agent reads from `.env`)    |
+| `NO_KEY`            | Private key not found in `.env` or keypair file      | Ensure `PRIVATE_KEY` is set in `.env` or provide a valid `keypairPath` |
+| `NO_API_KEY`        | API key not found in `.env`                          | Ensure `JUPITER_API_KEY` is set in `.env`                |
+| `ENV_NOT_FOUND`     | The `.env` file path in config.json does not exist   | Check the `envPath` in config.json points to a valid file |
+| `KEYPAIR_NOT_FOUND` | The keypair file path does not exist                 | Check the `keypairPath` in config.json points to a valid file |
 | `CRAFT_FAILED:400`  | Invalid wallet or insufficient JUP balance           | Check wallet has ≥1 JUP + small SOL for fees             |
 | `CRAFT_FAILED:401`  | Invalid or missing API key                           | Check `JUPITER_API_KEY` is set correctly                  |
 | `CRAFT_FAILED:429`  | Rate limited (2 requests/day per key)                | Wait until the next day or use a different API key        |
