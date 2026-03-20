@@ -346,18 +346,16 @@ x-api-key: your-api-key-here
 }
 ```
 
-> Only include `senderTwitterHandle` and `tokenMetadata` if the user provided values. Omit any of these fields entirely if not provided — do not send empty strings.
-
 | Field                 | Type   | Required | Notes                                      |
 | --------------------- | ------ | -------- | ------------------------------------------ |
 | `transaction`         | string | **Yes**  | Base64 user-signed transaction from craft   |
 | `requestId`           | string | **Yes**  | From `craft-txn` response                   |
 | `senderAddress`       | string | **Yes**  | Wallet that signed the transaction         |
 | `tokenId`             | string | **Yes**  | Token mint being verified                  |
-| `twitterHandle`       | string | **Yes**  | Token's Twitter URL                        |
-| `senderTwitterHandle` | string | No       | Requester's Twitter URL                    |
-| `description`         | string | **Yes**  | Description of the token                   |
-| `tokenMetadata`       | object | No       | Optional token metadata to set alongside verification (see [tokenMetadata schema](#tokenmetadata-object)) |
+| `twitterHandle`       | string | **Yes**  | Token's Twitter URL (required for express — send `""` only for metadata-only requests) |
+| `senderTwitterHandle` | string | No       | Requester's Twitter URL — omit entirely if not provided |
+| `description`         | string | **Yes**  | Description of the token (required for express — send `""` only for metadata-only requests) |
+| `tokenMetadata`       | object | No       | Optional token metadata (see [tokenMetadata schema](#tokenmetadata-object)) — omit entirely if not provided |
 
 > **Important:** When including `tokenMetadata`, first fetch existing data via `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}`, merge the user's updates on top, and send all fields. This preserves values the user did not change.
 

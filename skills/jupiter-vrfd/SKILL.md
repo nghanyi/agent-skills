@@ -347,7 +347,9 @@ Start with the fetched metadata from 6a-i as the base, add `tokenId`, then apply
 
 Do resend untouched existing fields from the fetched metadata so they are preserved server-side. Do not invent values for missing fields, and do not send blank values unless the user explicitly requested a clear.
 
-For **metadata-only** flow (when `canVerify: false, canMetadata: true`): this step is the primary collection step — verification params from Step 6 are skipped in the user conversation. For **express** metadata-only submissions, the runtime request can still send `twitterHandle: ""` and `description: ""` to satisfy the current execute schema without asking the user for unnecessary values.
+For **metadata-only** flow (when `canVerify: false, canMetadata: true`): this step is the primary collection step — verification params from Step 6 are skipped in the user conversation.
+
+> **Express metadata-only exception:** The `POST /payments/express/execute` endpoint requires `twitterHandle` and `description` as strings even for metadata-only requests. Since these fields are not relevant in a metadata-only flow, send `twitterHandle: ""` and `description: ""` to satisfy the schema — do not ask the user for them. This exception applies **only** to express metadata-only requests; for normal express verification, `twitterHandle` and `description` are required from the user.
 
 ### 7. Confirm Before Submitting
 
