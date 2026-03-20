@@ -1,6 +1,6 @@
 # Express Payment Execution
 
-When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was collected in Step 6 of the main flow.
+When the user has confirmed an **express** verification request, the agent executes the payment end-to-end. The wallet address was collected in Step 6 of the main flow and must be passed into the local script so it can verify the signer before signing.
 
 ## 7a. Locate Private Key Source
 
@@ -29,6 +29,7 @@ When writing `config.json` in Step 7c, include the **location** of secrets — n
 > - The agent NEVER reads, extracts, or handles the private key value. It only passes file paths to the script.
 > - The key is used ONLY to sign the transaction on the user's machine. Only the **signed transaction** (not the key) is sent to the Jupiter API.
 > - The script runs entirely locally — it reads the key, signs, and sends only the signed output.
+> - The user provides `walletAddress` separately. The script MUST derive the signer wallet locally and abort if it does not match that address.
 > - Recommend the user use a dedicated wallet with minimal funds, not their main holdings wallet.
 > - If the key is in a `.env` file, remind the user to ensure `.env` is in `.gitignore`.
 
@@ -47,7 +48,7 @@ Write a `pay.ts` script and a separate `config.json` file in the temp directory.
 
 1. Read secret **locations** from `config.json` — the agent writes file paths and env var names so the script can load secrets directly. The agent never reads or handles secret values.
 2. Load the private key from the user's `.env` file (via `dotenv`) or keypair file, and the API key from the `.env` file
-3. Derive the wallet address from the private key using `Keypair.fromSecretKey`
+3. Derive the wallet address from the private key using `Keypair.fromSecretKey`, compare it to the user-provided `walletAddress`, and abort on mismatch
 4. Call `GET /payments/express/craft-txn?senderAddress={derived-wallet}` with `x-api-key` header to get the unsigned transaction
 5. Deserialize as a `VersionedTransaction` (matching the production UI implementation)
 6. Verify the transaction contents before signing: decode the compiled instructions, confirm there is exactly one SPL Token transfer instruction (plus optional compute budget instructions), confirm the amount does not exceed 1 JUP, confirm the destination matches the expected receiver ATA, and reject if any unexpected instructions are present
@@ -99,6 +100,7 @@ const COMPUTE_BUDGET_PROGRAM_ID = new PublicKey(
 // so unchanged fields are preserved server-side.
 const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
 const TOKEN_ID: string = config.tokenId;
+const EXPECTED_WALLET_ADDRESS: string = config.walletAddress;
 const TWITTER_HANDLE: string = config.twitterHandle ?? "";
 const SENDER_TWITTER: string | undefined = config.senderTwitterHandle ?? undefined;
 const DESCRIPTION: string = config.description ?? "";
@@ -151,6 +153,20 @@ async function main() {
   }
   const senderAddress = keypair.publicKey.toBase58();
   console.log(`Wallet: ${senderAddress}`);
+
+  let expectedWallet: PublicKey;
+  try {
+    expectedWallet = new PublicKey(EXPECTED_WALLET_ADDRESS);
+  } catch {
+    console.error(`ERROR:INVALID_WALLET:Invalid wallet address: ${EXPECTED_WALLET_ADDRESS}`);
+    process.exit(1);
+  }
+  if (!keypair.publicKey.equals(expectedWallet)) {
+    console.error(
+      `ERROR:WALLET_MISMATCH:Derived wallet ${senderAddress} does not match provided wallet ${expectedWallet.toBase58()}`
+    );
+    process.exit(1);
+  }
 
   // Step 1: Craft the unsigned payment transaction
   const craftRes = await fetch(
@@ -311,6 +327,7 @@ Write a `config.json` file in the same temp directory with the collected paramet
   "envKeyName": "<env var name for private key, e.g. 'PRIVATE_KEY' or 'SOLANA_PRIVATE_KEY' — OMIT if using keypairPath>",
   "keypairPath": "<absolute path to keypair.json — OMIT if using envPath>",
   "apiKeyEnvName": "<env var name for API key, e.g. 'JUPITER_API_KEY' — defaults to 'JUPITER_API_KEY'>",
+  "walletAddress": "<user-provided wallet address that must match the signing key>",
   "tokenId": "<collected token mint>",
   "twitterHandle": "<collected twitter URL — OMIT THIS KEY if user skipped>",
   "senderTwitterHandle": "<collected sender twitter URL — OMIT THIS KEY if user skipped>",
@@ -334,6 +351,7 @@ Write a `config.json` file in the same temp directory with the collected paramet
   "envPath": "/Users/alice/project/.env",
   "envKeyName": "PRIVATE_KEY",
   "apiKeyEnvName": "JUPITER_API_KEY",
+  "walletAddress": "8xDr...",
   "tokenId": "So11111111111111111111111111111111111111112",
   "twitterHandle": "https://x.com/jupiterexchange",
   "description": "Official wrapped SOL"
@@ -346,6 +364,7 @@ Write a `config.json` file in the same temp directory with the collected paramet
   "envPath": "/Users/alice/project/.env",
   "keypairPath": "/Users/alice/.config/solana/id.json",
   "apiKeyEnvName": "JUPITER_API_KEY",
+  "walletAddress": "8xDr...",
   "tokenId": "So11111111111111111111111111111111111111112",
   "twitterHandle": "https://x.com/jupiterexchange",
   "description": "Official wrapped SOL"
@@ -395,6 +414,8 @@ Parse the output:
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
 | `NO_KEY`            | Private key not found in `.env` or keypair file      | Ensure `PRIVATE_KEY` is set in `.env` or provide a valid `keypairPath` |
 | `NO_API_KEY`        | API key not found in `.env`                          | Ensure `JUPITER_API_KEY` is set in `.env`                |
+| `INVALID_WALLET`    | The provided wallet address is not a valid Solana public key | Check the `walletAddress` value in `config.json`         |
+| `WALLET_MISMATCH`   | The provided wallet does not match the signing key   | Verify the wallet address and private key refer to the same wallet |
 | `ENV_NOT_FOUND`     | The `.env` file path in config.json does not exist   | Check the `envPath` in config.json points to a valid file |
 | `KEYPAIR_NOT_FOUND` | The keypair file path does not exist                 | Check the `keypairPath` in config.json points to a valid file |
 | `CRAFT_FAILED:400`  | Invalid wallet or insufficient JUP balance           | Check wallet has ≥1 JUP + small SOL for fees             |

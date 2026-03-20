@@ -25,7 +25,7 @@ Submit and pay for token verification on Jupiter via a simple REST API.
 - **Auth**: API key required for submission endpoints (`x-api-key` header). Eligibility checks are unauthenticated.
 - **Payment currency**: JUP (1 JUP per express verification)
 - **Naming**: "Express" and "premium" refer to the same paid tier. The user-facing name is **express**, but the API uses `"premium"` as the `verificationTier` value.
-- **Agent behavior**: Guide users efficiently — extract parameters from context, auto-resolve from environment, batch-collect remaining inputs, and confirm before submitting. See [Agent Conversation Flow](#agent-conversation-flow).
+- **Agent behavior**: Guide users efficiently — extract parameters from context, auto-resolve safe environment values where possible, batch-collect remaining inputs, and confirm before submitting. See [Agent Conversation Flow](#agent-conversation-flow).
 
 ## Use / Do Not Use
 
@@ -67,7 +67,7 @@ Load these on demand when you need implementation details:
 
 # Agent Conversation Flow
 
-When a user triggers this skill, extract as much as possible from the user's initial message, auto-resolve values from the environment (API key, private key, wallet), then batch-collect any remaining required fields in as few prompts as possible. Validate all inputs and confirm before making API calls.
+When a user triggers this skill, extract as much as possible from the user's initial message, auto-resolve safe environment values where possible (API key presence and private key source location, but not the wallet address), then batch-collect any remaining required fields in as few prompts as possible. Validate all inputs and confirm before making API calls.
 
 ## Step-by-Step Parameter Collection
 
@@ -174,17 +174,19 @@ Check that `.env` / `.env.local` contains a `JUPITER_API_KEY` or `JUP_API_KEY` v
 
 The key is passed via the `x-api-key` header. Rate limit: 2 requests/day per key. For full API key management details, see [API Reference — Managing Keys](references/api-reference.md#managing-keys).
 
-**b) Private Key & Wallet (express tier only)**
+**b) Private Key Source (express tier only)**
 
-For **express** submissions, check for a private key source before asking for a wallet address:
+For **express** submissions, check for a private key source before collecting the remaining submission fields. The wallet address must still come from the user unless it was already provided in Step 0.
 
 1. Check that `.env` / `.env.local` contains a `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY` variable — only check that the variable **exists**, do NOT read the value
 2. If not found, check for a keypair file at `~/.config/solana/id.json`
 3. If found, note the **file path and variable name** for later use in the payment phase ([Payment Execution — Step 7a](references/payment-execution.md#7a-locate-private-key-source))
 
 > **SECURITY:** The agent must NEVER read the contents of `.env` files or keypair files containing private keys. Only confirm the file exists and which variable name holds the key. The payment script loads secrets directly at runtime.
+>
+> **SECURITY:** The agent must NEVER derive the wallet address from a private key or keypair file. The user provides `walletAddress`, and the local payment script verifies that it matches the signing key before signing.
 
-If the private key source is found, the wallet address still needs to be collected in Step 6 (since the agent cannot derive it without reading the key). Inform the user that a private key was found (e.g., _"Found `PRIVATE_KEY` in your .env — the payment script will use it directly"_).
+If the private key source is found, the wallet address still needs to be collected in Step 6 unless it was already provided in Step 0. Inform the user that a private key source was found (e.g., _"Found `PRIVATE_KEY` in your .env — the payment script will use it directly after verifying it matches your wallet address"_).
 
 If not found, the wallet address will be collected in Step 6, and the private key source will be resolved later during payment execution.
 
@@ -208,15 +210,16 @@ Collect all missing required fields in a **single prompt**. Only ask for fields 
 | Token Twitter URL | Required | Optional | `https://x.com/…` or `https://twitter.com/…` |
 | Requester Twitter URL | Optional | Optional | Omit if skipped — do not send empty string |
 | Description | Required | Optional | Short description of the token |
-| Wallet address | Required if not auto-derived in Step 5b | Required | Valid Solana public key |
+| Wallet address | Required | Required | Valid Solana public key; for express, the local payment script must derive the signer and abort if it does not match this address |
 
-Build the prompt dynamically — include **only** fields still needed. Example for express with wallet auto-resolved:
+Build the prompt dynamically — include **only** fields still needed. Example for express when a private key source was found but the wallet address is still needed:
 
 > Please provide the following:
 >
 > 1. **Token Twitter URL** (required): e.g. `https://x.com/jupiterexchange`
 > 2. **Your Twitter URL** (optional, "skip" to omit): e.g. `https://x.com/your_handle`
 > 3. **Token description** (required): e.g. _"Community governance token for XYZ protocol"_
+> 4. **Wallet address** (required): your Solana public key
 
 Example for basic with no auto-resolved values:
 
@@ -234,7 +237,7 @@ Example for basic with no auto-resolved values:
 **Validation rules** (apply regardless of how values were collected):
 
 - **Twitter URLs**: Must start with `https://x.com/` or `https://twitter.com/` followed by a valid username (1–15 chars, alphanumeric + underscore). Auto-convert bare handles like `@handle` to `https://x.com/handle` and confirm with the user.
-- **Wallet address**: Validate with `new PublicKey(address)` from `@solana/web3.js`. For **express**, if a wallet was auto-derived in Step 5b, confirm it matches any user-provided address. If they don't match, ask which to use.
+- **Wallet address**: Validate with `new PublicKey(address)` from `@solana/web3.js`. For **express**, the agent must not derive the wallet itself. The local payment script derives the signer wallet at execution time and MUST abort if it does not match the user-provided address.
 - **Skipped optional fields**: Omit entirely from the request — do not send empty strings.
 
 ### 6a. Collect Metadata Fields (when metadata is included)
@@ -365,6 +368,11 @@ Present a summary of all collected parameters and ask for confirmation:
 > | **Your Twitter**  | {url or _not provided_}     |
 > | **Description**   | {text or _not provided_}    |
 > | **Wallet**        | {address or _not provided_} |
+> | **Cost**          | {`1 JUP` for express / `Free` for basic} |
+
+For **express** tier, include a balance warning after the summary table:
+
+> **Make sure your wallet has at least 1 JUP and a small amount of SOL for transaction fees before proceeding.**
 
 If metadata fields were collected in Step 6a, add them to the summary:
 
@@ -384,7 +392,7 @@ If the user says no, ask which field to change.
 **Important: When including `tokenMetadata`, fetch the existing data from `GET /tokenMetadata/getFromRpcAndSearch/{tokenId}`, merge the user's changes on top, and send the full merged object.** This preserves untouched metadata fields. Do not send empty strings or `null` for fields the user did not ask to clear.
 
 - For **basic**: call `POST /basic/submit` with `submitVerification: true` and the collected parameters. Include `tokenMetadata` in the request body when metadata fields were collected in Step 6a — the `tokenMetadata` object should be the full merged metadata from the fetched token info plus the user's edits. Report the result — response includes `verificationCreated` and `metadataCreated` booleans. Done. (See [API Reference](references/api-reference.md) for request/response details.)
-- For **express**: load [Payment Execution](references/payment-execution.md) and follow steps 7a–7e. The agent will resolve the user's private key, write a payment script, execute it locally, and report the result. When metadata fields were collected, send the full merged `tokenMetadata` object so unchanged fields are preserved.
+- For **express**: load [Payment Execution](references/payment-execution.md) and follow steps 7a–7e. The agent will locate the user's private key source, write a payment script, execute it locally, and report the result. The script must derive the signer wallet locally and abort if it does not match the user-provided `walletAddress`. When metadata fields were collected, send the full merged `tokenMetadata` object so unchanged fields are preserved.
 - For **metadata-only with basic tier** (when `canVerify: false, canMetadata: true` and basic was selected in Step 2): call `POST /basic/submit` with `submitVerification: false` and include the full merged `tokenMetadata` object. Do not include verification parameters. Report `metadataCreated` result.
 - For **metadata-only with express tier** (when `canVerify: false, canMetadata: true` and express was selected in Step 2): load [Payment Execution](references/payment-execution.md) and follow steps 7a–7e. The payment flow still applies (1 JUP) — include the full merged `tokenMetadata` object. The current `POST /payments/express/execute` schema still requires `twitterHandle` and `description` strings even for metadata-only requests, so send `twitterHandle: ""` and `description: ""` unless the user explicitly provided values. The execute endpoint will skip verification creation (since `canVerify: false`) but will create the metadata update. Report `metadataCreated` result.
 
