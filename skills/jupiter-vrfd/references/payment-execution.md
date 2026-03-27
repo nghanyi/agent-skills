@@ -11,7 +11,7 @@ The guide relies only on these routes:
 Precondition:
 
 - the user has already provided the paying wallet
-- the user has confirmed that wallet holds at least 1 JUP
+- the user has confirmed that wallet holds at least 1 JUP plus a small amount of SOL for fees
 
 ## 1. Locate the Local Signing Source
 
@@ -30,14 +30,25 @@ Security rules:
 - only record file paths and env var names
 - the signing key stays local; only the signed transaction is submitted
 
-## 2. Set Up a Temporary Workspace
+## 2. Preflight the Execution Environment
+
+Before installing packages or calling Jupiter:
+
+- if `curl`, `npm install`, or the execution script fails with DNS, `fetch failed`, or other sandbox-style network errors, rerun with the environment's required approval or escalation
+- prefer Node 22+ with `node --experimental-strip-types`; in restricted sandboxes, `tsx` can fail with `listen EPERM ...pipe` because it opens an IPC socket
+- make the temp workspace ESM before running `pay.ts`, because `npm init -y` defaults to `"type": "commonjs"` and that breaks `import` syntax in the script
+
+## 3. Set Up a Temporary Workspace
 
 ```bash
-TMPDIR=$(mktemp -d /tmp/jup-verify-XXXXXX)
-cd "$TMPDIR" && npm init -y && npm install @solana/web3.js @solana/spl-token bs58 dotenv
+TMPDIR=$(mktemp -d /tmp/jup-verify-XXXXXX) &&
+cd "$TMPDIR" &&
+npm init -y &&
+npm pkg set type=module &&
+npm install @solana/web3.js @solana/spl-token bs58 dotenv tsx
 ```
 
-## 3. Write `config.json`
+## 4. Write `config.json`
 
 Write a config file that contains request parameters and secret locations, never secret values.
 
@@ -65,7 +76,7 @@ Notes:
 - if the caller is doing a metadata-only execute request, send `twitterHandle: ""` and `description: ""` because the current execute schema still requires strings
 - if `tokenMetadata` is present, pass through the object the user already has; this guide does not fetch or merge metadata via private routes
 
-## 4. Write `pay.ts`
+## 5. Write `pay.ts`
 
 The script should:
 
@@ -133,23 +144,24 @@ function loadKeypair() {
   return Keypair.fromSecretKey(bs58.decode(privateKey));
 }
 
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
 async function main() {
   const keypair = loadKeypair();
   const senderAddress = keypair.publicKey.toBase58();
 
   if (senderAddress !== config.walletAddress) {
-    console.error(
-      `ERROR:WALLET_MISMATCH:${senderAddress} != ${config.walletAddress}`
-    );
-    process.exit(1);
+    fail(`ERROR:WALLET_MISMATCH:${senderAddress} != ${config.walletAddress}`);
   }
 
   const craftRes = await fetch(
     `${BASE_URL}/payments/express/craft-txn?senderAddress=${senderAddress}`
   );
   if (!craftRes.ok) {
-    console.error(`ERROR:CRAFT_FAILED:${craftRes.status}:${await craftRes.text()}`);
-    process.exit(1);
+    fail(`ERROR:CRAFT_FAILED:${craftRes.status}:${await craftRes.text()}`);
   }
 
   const craftData = await craftRes.json();
@@ -163,29 +175,25 @@ async function main() {
   );
 
   if (mainIxs.length !== 1) {
-    console.error(`ERROR:TX_VERIFY_FAILED:unexpected instruction count`);
-    process.exit(1);
+    fail(`ERROR:TX_VERIFY_FAILED:unexpected instruction count`);
   }
 
   const ix = mainIxs[0];
   const programId = accountKeys[ix.programIdIndex];
   if (!programId.equals(TOKEN_PROGRAM_ID)) {
-    console.error(`ERROR:TX_VERIFY_FAILED:unexpected program`);
-    process.exit(1);
+    fail(`ERROR:TX_VERIFY_FAILED:unexpected program`);
   }
 
   const data = Buffer.from(ix.data);
   const opcode = data[0];
   if ((opcode !== 3 && opcode !== 12) || data.length < 9) {
-    console.error(`ERROR:TX_VERIFY_FAILED:not a token transfer`);
-    process.exit(1);
+    fail(`ERROR:TX_VERIFY_FAILED:not a token transfer`);
   }
 
   const transferAmount = data.readBigUInt64LE(1);
   const expectedAmount = BigInt(craftData.amount);
   if (transferAmount !== expectedAmount || transferAmount > MAX_AMOUNT) {
-    console.error(`ERROR:TX_VERIFY_FAILED:amount mismatch`);
-    process.exit(1);
+    fail(`ERROR:TX_VERIFY_FAILED:amount mismatch`);
   }
 
   const destIndex = opcode === 12 ? ix.accountKeyIndexes[2] : ix.accountKeyIndexes[1];
@@ -195,8 +203,7 @@ async function main() {
     new PublicKey(craftData.receiverAddress)
   );
   if (!destination.equals(expectedReceiverAta)) {
-    console.error(`ERROR:TX_VERIFY_FAILED:destination mismatch`);
-    process.exit(1);
+    fail(`ERROR:TX_VERIFY_FAILED:destination mismatch`);
   }
 
   tx.sign([keypair]);
@@ -221,40 +228,55 @@ async function main() {
     body: JSON.stringify(executeBody),
   });
 
-  const executeData = await executeRes.json();
+  const executeText = await executeRes.text();
+  let executeData = executeText;
+  try {
+    executeData = JSON.parse(executeText);
+  } catch {
+    // Keep raw text for error reporting.
+  }
+
   if (executeRes.ok && executeData.status === "Success") {
     console.log(`SUCCESS:${executeData.signature}`);
     return;
   }
 
-  console.error(`ERROR:EXECUTE_FAILED:${JSON.stringify(executeData)}`);
-  process.exit(1);
+  fail(`ERROR:EXECUTE_FAILED:${JSON.stringify(executeData)}`);
 }
 
 main().catch((err) => {
-  console.error(`ERROR:EXCEPTION:${err.message}`);
-  process.exit(1);
+  fail(`ERROR:EXCEPTION:${err.message}`);
 });
 ```
 
-## 5. Run the Script
+## 6. Run the Script
+
+Preferred:
+
+```bash
+cd "$TMPDIR" && node --experimental-strip-types pay.ts
+```
+
+Notes:
+
+- this requires Node 22+ and the ESM `package.json` change above
+- if the script fails with `fetch failed`, rerun it with the environment's required network approval or escalation
+- do not default to `tsx` in restricted sandboxes
+
+Fallback:
 
 ```bash
 cd "$TMPDIR" && npx tsx pay.ts
 ```
 
-Fallback:
-
-```bash
-cd "$TMPDIR" && npx ts-node pay.ts
-```
+Use the fallback only when the environment allows `tsx` to create its IPC pipe.
 
 Parse the output:
 
 - `SUCCESS:<signature>` means the request was accepted
 - `ERROR:<code>:<message>` means the flow failed
 
-## 6. Report and Clean Up
+## 7. Report and Clean Up
 
 On success, report:
 
@@ -272,6 +294,8 @@ Useful failure buckets:
 | `TX_VERIFY_FAILED` | Crafted transaction did not match expectations |
 | `EXECUTE_FAILED` | Expired transaction, eligibility conflict, or execution failure |
 | `EXCEPTION` | Local script or network problem |
+| `listen EPERM ...pipe` | `tsx` IPC socket blocked by the sandbox; use `node --experimental-strip-types` instead |
+| `fetch failed` | Outbound network blocked; rerun with the environment's required approval or escalation |
 
 Always remove the temp directory after the run:
 

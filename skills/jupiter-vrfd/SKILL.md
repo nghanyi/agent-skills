@@ -49,6 +49,14 @@ Load these on demand:
 - **[API Reference](references/api-reference.md)** for request and response shapes for the 3 public routes
 - **[Payment Execution](references/payment-execution.md)** when the user wants to submit and has confirmed the paying wallet details
 
+## Execution Notes
+
+For submission requests in constrained agent environments:
+
+- outbound HTTP from `curl` or the local Node script may require sandbox approval or escalation
+- package installation may require approval or escalation
+- prefer an ESM temp workspace and `node --experimental-strip-types pay.ts` over `npx tsx pay.ts` in sandboxed Codex environments, because `tsx` may fail when it cannot open its IPC pipe
+
 ---
 
 # Agent Conversation Flow
@@ -65,7 +73,7 @@ Look for:
 - token Twitter URL or handle
 - requester Twitter URL or handle
 - description
-- confirmation that the paying wallet holds at least 1 JUP
+- confirmation that the paying wallet holds at least 1 JUP plus a small amount of SOL for fees
 
 ## Step 1. Route the Request
 
@@ -134,11 +142,11 @@ Check for a local signing source in this order:
 1. `.env` / `.env.local` contains `PRIVATE_KEY` or `SOLANA_PRIVATE_KEY`
 2. `~/.config/solana/id.json`
 
-Only confirm file paths and variable names. Never read secret values. Never derive the wallet address from the private key inside the agent.
+Only confirm file paths and variable names in chat. Never print secret values. Only derive the wallet address inside the local execution script so it can verify that the signer matches `walletAddress`.
 
 ## Step 5. Batch-Collect Remaining Parameters
 
-Collect all missing fields in one prompt, including confirmation that the paying wallet holds at least 1 JUP.
+Collect all missing fields in one prompt, including confirmation that the paying wallet holds at least 1 JUP plus a small amount of SOL for fees.
 
 | Field | Required | Notes |
 | --- | --- | --- |
@@ -153,7 +161,7 @@ Validation rules:
 - Twitter URLs must be `https://x.com/...` or `https://twitter.com/...`
 - bare handles may be normalized to `https://x.com/{handle}` with user confirmation
 - omit absent optional fields instead of sending empty strings
-- require the user to confirm the paying wallet currently holds at least 1 JUP before continuing
+- require the user to confirm the paying wallet currently holds at least 1 JUP plus a small amount of SOL for fees before continuing
 
 ## Step 6. Confirm Before Submitting
 
@@ -170,6 +178,7 @@ Summarize:
 Require an explicit final confirmation that:
 
 - the listed wallet will pay 1 JUP
+- that wallet has enough SOL for network fees
 - the user wants you to proceed with the submission now
 
 ## Step 7. Submit and Report
